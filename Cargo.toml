@@ -1,0 +1,14 @@
+[package]
+name = "txmodems"
+publish = false
+readme = "README.md"
+repository = "https://github.com/shymega/txmodems"
+description = "Rust library for Various MODEM file transfer protocols"
+categories = ["rust", "data-transfer", "MODEM", "file-transfer"]
+keywords = ["rust", "data-transfer", "MODEM", "file-transfer"]
+version = "0.1.0"
+authors = ["Dom Rodriguez <shymega@shymega.org.uk>"]
+license = "MIT"
+edition = "2018"
+
+[dependencies]
