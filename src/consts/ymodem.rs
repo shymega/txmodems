@@ -1,5 +1,5 @@
-//! Collection of protocol bytes for internal usage in crate.
-#![allow(dead_code)] // temporqary
+//! Collection of protocol bytes for internal usage in `txmodems` (YMODEM-specific)
+#![allow(dead_code)] // temporary
 
 const NUL: &[u8] = b"\x00";
 const SOH: &[u8] = b"\x01";
