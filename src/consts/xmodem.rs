@@ -1,4 +1,4 @@
-//! Collection of protocol bytes for internal usage in `txmodems` (YMODEM-specific)
+//! Collection of protocol bytes for internal usage in `txmodems` (XMODEM-specific)
 #![allow(dead_code)] // temporary
 
 pub const NUL: &[u8] = b"\x00";
