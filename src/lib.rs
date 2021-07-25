@@ -16,3 +16,18 @@
 )]
 
 mod consts;
+
+pub use variants::ModemVariants;
+
+mod variants {
+    /// Enum of different -MODEM variants.
+    #[derive(Debug, Copy, Clone)]
+    pub enum ModemVariants {
+        /// YMODEM file transfer protocol.
+        YMODEM,
+        /// XMODEM file transfer protocol.
+        XMODEM,
+        /// ZMODEM file transfer protocol.
+        ZMODEM
+    }
+}
