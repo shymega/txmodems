@@ -1,10 +1,12 @@
 //! This crate implements various MODEM file transfer protocols.
-//! Current priority is YMODEM, which is to be used with the Planet Computers Cosmo Communicator.
+#![no_std]
 #![deny(
+    warnings,
     missing_copy_implementations,
     missing_debug_implementations,
-    missing_docs,
+    //missing_docs,
     clippy::all,
+    clippy::pedantic,
     clippy::cargo,
     trivial_casts,
     trivial_numeric_casts,
@@ -15,19 +17,32 @@
     variant_size_differences
 )]
 
-mod consts;
+#[macro_use]
+extern crate log;
 
-pub use variants::ModemVariants;
+mod xmodem;
 
-mod variants {
-    /// Enum of different -MODEM variants.
-    #[derive(Debug, Copy, Clone)]
-    pub enum ModemVariants {
-        /// YMODEM file transfer protocol.
-        YMODEM,
-        /// XMODEM file transfer protocol.
-        XMODEM,
-        /// ZMODEM file transfer protocol.
-        ZMODEM
+pub mod variants {
+    #[cfg(feature = "xmodem")]
+    pub mod xmodem {
+        pub use crate::xmodem::*;
+        pub mod consts {
+            //! Collection of protocol bytes for internal usage in  `txmodems` (XMODEM-specific)
+
+            pub const NUL: u8 = 0x00;
+            pub const SOH: u8 = 0x01;
+            pub const STX: u8 = 0x02;
+            pub const EOT: u8 = 0x04;
+            pub const ACK: u8 = 0x06;
+            pub const ACK2: u8 = 0x86;
+            pub const DLE: u8 = 0x10;
+            pub const NAK: u8 = 0x15;
+            pub const CAN: u8 = 0x18;
+            pub const CAN2: u8 = 0x98;
+            pub const CRC: u8 = 0x43;
+            pub const CRC2: u8 = 0xC3;
+            pub const CRC3: u8 = 0x83;
+            pub const ABT: u8 = 0x61;
+        }
     }
 }
