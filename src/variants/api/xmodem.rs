@@ -1,18 +1,20 @@
 extern crate alloc;
 
+use log::{debug, error, info, warn};
+
 use alloc::{boxed::Box, vec, vec::Vec};
 use core::convert::From;
 use core::fmt::{self, Formatter};
 
 use core2::io::{self, Read, Write};
 
-use crate::variants::xmodem::consts::{ACK, CAN, CRC, EOT, NAK, SOH, STX};
+use crate::variants::xmodem::{common::{ChecksumKind, BlockLengthKind}, Consts};
 
 // TODO: Send CAN byte after too many errors
 // TODO: Handle CAN bytes while sending
 // TODO: Implement Error for Error
 
-pub type Result<T> = core::result::Result<T, Error>;
+pub type Result<T, E = Error> = core::result::Result<T, E>;
 
 #[derive(Debug)]
 pub enum Error {
@@ -38,18 +40,6 @@ impl fmt::Display for Error {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
-pub enum Checksum {
-    Standard,
-    CRC16,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub enum BlockLength {
-    Standard = 128,
-    OneK = 1024,
-}
-
 /// Configuration for the XMODEM transfer.
 #[derive(Copy, Clone, Debug)]
 pub struct Xmodem {
@@ -63,10 +53,10 @@ pub struct Xmodem {
 
     /// The length of each block. There are only two options: 128-byte blocks (standard
     ///  XMODEM) or 1024-byte blocks (XMODEM-1k).
-    pub block_length: BlockLength,
+    pub block_length: BlockLengthKind,
 
     /// The checksum mode used by XMODEM. This is determined by the receiver.
-    checksum_mode: Checksum,
+    checksum_mode: ChecksumKind,
     errors: u32,
 }
 
@@ -78,12 +68,13 @@ impl Default for Xmodem {
 
 impl Xmodem {
     /// Creates the XMODEM config with default parameters.
-    #[must_use] pub fn new() -> Self {
+    #[must_use]
+    pub fn new() -> Self {
         Xmodem {
             max_errors: 16,
             pad_byte: 0x1a,
-            block_length: BlockLength::Standard,
-            checksum_mode: Checksum::Standard,
+            block_length: BlockLengthKind::Standard,
+            checksum_mode: ChecksumKind::Standard,
             errors: 0,
         }
     }
@@ -119,7 +110,7 @@ impl Xmodem {
     ///
     /// `dev` should be the serial communication channel (e.g. the serial device).
     /// The received data will be written to `outstream`.
-    /// `checksum` indicates which checksum mode should be used; `Checksum::Standard` is
+    /// `checksum` indicates which checksum mode should be used; `ChecksumKind::Standard` is
     /// a reasonable default.
     ///
     /// # Timeouts
@@ -131,24 +122,24 @@ impl Xmodem {
         &mut self,
         dev: &mut D,
         outstream: &mut W,
-        checksum: Checksum,
+        checksum: ChecksumKind,
     ) -> Result<()> {
         self.errors = 0;
         self.checksum_mode = checksum;
         debug!("Starting XMODEM receive");
         dev.write_all(&[match self.checksum_mode {
-            Checksum::Standard => NAK,
-            Checksum::CRC16 => CRC,
+            ChecksumKind::Standard => Consts::NAK.into(),
+            ChecksumKind::Crc16 => Consts::CRC.into(),
         }])?;
         debug!("NCG sent. Receiving stream.");
         let mut packet_num: u8 = 1;
         loop {
-            match get_byte_timeout(dev)? {
-                bt @ Some(SOH | STX) => {
+            match get_byte_timeout(dev)?.map(Consts::from) {
+                bt @ Some(Consts::SOH | Consts::STX) => {
                     // Handle next packet
                     let packet_size = match bt {
-                        Some(SOH) => 128,
-                        Some(STX) => 1024,
+                        Some(Consts::SOH) => 128,
+                        Some(Consts::STX) => 1024,
                         _ => 0, // Why does the compiler need this?
                     };
                     let pnum = get_byte(dev)?; // specified packet number
@@ -160,38 +151,37 @@ impl Xmodem {
                     data.resize(packet_size, 0);
                     dev.read_exact(&mut data)?;
                     let success = match self.checksum_mode {
-                        Checksum::Standard => {
+                        ChecksumKind::Standard => {
                             let recv_checksum = get_byte(dev)?;
                             calc_checksum(&data) == recv_checksum
                         }
-                        Checksum::CRC16 => {
-                            let recv_checksum = (u16::from(get_byte(dev)?) << 8)
+                        ChecksumKind::Crc16 => {
+                            let recv_checksum = (u16::from(get_byte(dev)?)
+                                << 8)
                                 + u16::from(get_byte(dev)?);
                             calc_crc(&data) == recv_checksum
                         }
                     };
 
                     if cancel_packet {
-                        dev.write_all(&[CAN])?;
-                        dev.write_all(&[CAN])?;
+                        dev.write_all(&[Consts::CAN.into()])?;
+                        dev.write_all(&[Consts::CAN.into()])?;
                         return Err(Error::Canceled);
                     }
                     if success {
                         packet_num = packet_num.wrapping_add(1);
-                        dev.write_all(&[ACK])?;
+                        dev.write_all(&[Consts::ACK.into()])?;
                         outstream.write_all(&data)?;
                     } else {
-                        dev.write_all(&[NAK])?;
+                        dev.write_all(&[Consts::NAK.into()])?;
                         self.errors += 1;
                     }
                 }
-                Some(EOT) => {
+                #[allow(non_snake_case)]
+                Some(_EOT) => {
                     // End of file
-                    dev.write_all(&[ACK])?;
+                    dev.write_all(&[Consts::ACK.into()])?;
                     break;
-                }
-                Some(_) => {
-                    warn!("Unrecognized symbol!");
                 }
                 None => {
                     self.errors += 1;
@@ -203,8 +193,10 @@ impl Xmodem {
                     "Exhausted max retries ({}) while waiting for ACK for EOT",
                     self.max_errors
                 );
-                dev.write_all(&[CAN])?;
-                return Err(Error::ExhaustedRetries(Box::new(self.errors)));
+                dev.write_all(&[Consts::CAN.into()])?;
+                return Err(Error::ExhaustedRetries(Box::new(
+                    self.errors
+                )));
             }
         }
         Ok(())
@@ -213,24 +205,24 @@ impl Xmodem {
     fn start_send<D: Read + Write>(&mut self, dev: &mut D) -> Result<()> {
         let mut cancels = 0u32;
         loop {
-            match get_byte_timeout(dev)? {
+            match get_byte_timeout(dev)?.map(Consts::from) {
                 Some(c) => match c {
-                    NAK => {
+                    Consts::NAK => {
                         debug!("Standard checksum requested");
-                        self.checksum_mode = Checksum::Standard;
+                        self.checksum_mode = ChecksumKind::Standard;
                         return Ok(());
                     }
-                    CRC => {
+                    Consts::CRC => {
                         debug!("16-bit CRC requested");
-                        self.checksum_mode = Checksum::CRC16;
+                        self.checksum_mode = ChecksumKind::Crc16;
                         return Ok(());
                     }
-                    CAN => {
+                    Consts::CAN => {
                         warn!("Cancel (CAN) byte received");
                         cancels += 1;
                     }
                     c => warn!(
-                        "Unknown byte received at start of XMODEM transfer: {}",
+                        "Unknown byte received at start of XMODEM transfer: {:?}",
                         c
                     ),
                 },
@@ -254,10 +246,12 @@ impl Xmodem {
                     "Exhausted max retries ({}) at start of XMODEM transfer.",
                     self.max_errors
                 );
-                if let Err(err) = dev.write_all(&[CAN]) {
+                if let Err(err) = dev.write_all(&[Consts::CAN.into()]) {
                     warn!("Error sending CAN byte: {}", err);
                 }
-                return Err(Error::ExhaustedRetries(Box::new(self.errors)));
+                return Err(Error::ExhaustedRetries(Box::new(
+                    self.errors
+                )));
             }
         }
     }
@@ -278,21 +272,21 @@ impl Xmodem {
 
             block_num += 1;
             buff[0] = match self.block_length {
-                BlockLength::Standard => SOH,
-                BlockLength::OneK => STX,
+                BlockLengthKind::Standard => Consts::SOH.into(),
+                BlockLengthKind::OneK => Consts::STX.into(),
             };
-            buff[1] = (block_num & 0xFF) as u8;
-            buff[2] = 0xFF - buff[1];
+            buff[1] = (&block_num & 0xFF) as u8;
+            buff[2] = 0xFF - &buff[1];
 
             match self.checksum_mode {
-                Checksum::Standard => {
+                ChecksumKind::Standard => {
                     let checksum = calc_checksum(&buff[3..]);
                     buff.push(checksum);
                 }
-                Checksum::CRC16 => {
+                ChecksumKind::Crc16 => {
                     let crc = calc_crc(&buff[3..]);
                     buff.push(((crc >> 8) & 0xFF) as u8);
-                    buff.push((crc & 0xFF) as u8);
+                    buff.push((&crc & 0xFF) as u8);
                 }
             }
 
@@ -301,9 +295,9 @@ impl Xmodem {
 
             match get_byte_timeout(dev)? {
                 Some(c) => {
-                    // Appease Clippy with this conditional black.
+                    // Appease Clippy with this conditional block.
                     #[allow(clippy::redundant_else)]
-                    if c == ACK {
+                    if c == Consts::ACK.into() {
                         debug!("Received ACK for block {}", block_num);
                         continue;
                     } else {
@@ -321,19 +315,21 @@ impl Xmodem {
             if self.errors >= self.max_errors {
                 error!("Exhausted max retries ({}) while sending block {} in XMODEM transfer",
                        self.max_errors, block_num);
-                return Err(Error::ExhaustedRetries(Box::new(self.errors)));
+                return Err(Error::ExhaustedRetries(Box::new(
+                    self.errors
+                )));
             }
         }
     }
 
     fn finish_send<D: Read + Write>(&mut self, dev: &mut D) -> Result<()> {
         loop {
-            dev.write_all(&[EOT])?;
+            dev.write_all(&[Consts::EOT.into()])?;
 
             if let Some(c) = get_byte_timeout(dev)? {
                 // Appease Clippy with this conditional black.
                 #[allow(clippy::redundant_else)]
-                if c == ACK {
+                if c == Consts::ACK.into() {
                     info!("XMODEM transmission successful");
                     return Ok(());
                 } else {
@@ -348,7 +344,9 @@ impl Xmodem {
                     "Exhausted max retries ({}) while waiting for ACK for EOT",
                     self.max_errors
                 );
-                return Err(Error::ExhaustedRetries(Box::new(self.errors)));
+                return Err(Error::ExhaustedRetries(Box::new(
+                    self.errors
+                )));
             }
         }
     }
@@ -362,14 +360,14 @@ fn calc_crc(data: &[u8]) -> u16 {
     crc16::State::<crc16::XMODEM>::calculate(data)
 }
 
-fn get_byte<R: Read>(reader: &mut R) -> core2::io::Result<u8> {
+fn get_byte<R: Read>(reader: &mut R) -> io::Result<u8> {
     let mut buff = [0];
     reader.read_exact(&mut buff)?;
     Ok(buff[0])
 }
 
 /// Turns timeout errors into `Ok(None)`
-fn get_byte_timeout<R: Read>(reader: &mut R) -> core2::io::Result<Option<u8>> {
+fn get_byte_timeout<R: Read>(reader: &mut R) -> io::Result<Option<u8>> {
     match get_byte(reader) {
         Ok(c) => Ok(Some(c)),
         Err(err) => {

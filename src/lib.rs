@@ -16,32 +16,9 @@
     variant_size_differences
 )]
 
-#[macro_use]
-extern crate log;
+// Run checks for -MODEM features.
+#[cfg(not(any(feature = "xmodem", feature = "zmodem", feature = "ymodem")))]
+compile_error!("No `-MODEM` specified, please specify at least one!");
 
-mod xmodem;
-
-pub mod variants {
-    #[cfg(feature = "xmodem")]
-    pub mod xmodem {
-        pub use crate::xmodem::*;
-        pub mod consts {
-            //! Collection of protocol bytes for internal usage in  `txmodems` (XMODEM-specific)
-
-            pub const NUL: u8 = 0x00;
-            pub const SOH: u8 = 0x01;
-            pub const STX: u8 = 0x02;
-            pub const EOT: u8 = 0x04;
-            pub const ACK: u8 = 0x06;
-            pub const ACK2: u8 = 0x86;
-            pub const DLE: u8 = 0x10;
-            pub const NAK: u8 = 0x15;
-            pub const CAN: u8 = 0x18;
-            pub const CAN2: u8 = 0x98;
-            pub const CRC: u8 = 0x43;
-            pub const CRC2: u8 = 0xC3;
-            pub const CRC3: u8 = 0x83;
-            pub const ABT: u8 = 0x61;
-        }
-    }
-}
+mod common;
+pub mod variants;
