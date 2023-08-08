@@ -16,6 +16,7 @@
     variant_size_differences
 )]
 
+extern crate alloc;
 // Run checks for -MODEM features.
 #[cfg(not(any(feature = "xmodem", feature = "zmodem", feature = "ymodem")))]
 compile_error!("No `-MODEM` specified, please specify at least one!");

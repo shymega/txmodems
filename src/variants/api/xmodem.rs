@@ -1,5 +1,3 @@
-extern crate alloc;
-
 use log::{debug, error, info, warn};
 
 use alloc::{boxed::Box, vec, vec::Vec};
