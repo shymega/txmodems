@@ -14,10 +14,12 @@ use crate::variants::xmodem::{common::{ChecksumKind, BlockLengthKind}, Consts};
 // TODO: Handle CAN bytes while sending
 // TODO: Implement Error for Error
 
-pub type Result<T, E = Error> = core::result::Result<T, E>;
+type XmodemResult<T, E = Error> = Result<T, E>;
 
+/// Enum of various `Error` variants.
 #[derive(Debug)]
 pub enum Error {
+    /// Boxed `core2::io::Error`, used for storing I/O errors.
     Io(Box<io::Error>),
 
     /// The number of communications errors exceeded `max_errors` in a single
@@ -93,7 +95,7 @@ impl Xmodem {
         &mut self,
         dev: &mut D,
         stream: &mut R,
-    ) -> Result<()> {
+    ) -> XmodemResult<()> {
         self.errors = 0;
 
         debug!("Starting XMODEM transfer");
@@ -123,7 +125,7 @@ impl Xmodem {
         dev: &mut D,
         outstream: &mut W,
         checksum: ChecksumKind,
-    ) -> Result<()> {
+    ) -> XmodemResult<()> {
         self.errors = 0;
         self.checksum_mode = checksum;
         debug!("Starting XMODEM receive");
@@ -202,7 +204,7 @@ impl Xmodem {
         Ok(())
     }
 
-    fn start_send<D: Read + Write>(&mut self, dev: &mut D) -> Result<()> {
+    fn start_send<D: Read + Write>(&mut self, dev: &mut D) -> XmodemResult<()> {
         let mut cancels = 0u32;
         loop {
             match get_byte_timeout(dev)?.map(Consts::from) {
@@ -260,7 +262,7 @@ impl Xmodem {
         &mut self,
         dev: &mut D,
         stream: &mut R,
-    ) -> Result<()> {
+    ) -> XmodemResult<()> {
         let mut block_num = 0u32;
         loop {
             let mut buff = vec![self.pad_byte; self.block_length as usize + 3];
@@ -322,7 +324,7 @@ impl Xmodem {
         }
     }
 
-    fn finish_send<D: Read + Write>(&mut self, dev: &mut D) -> Result<()> {
+    fn finish_send<D: Read + Write>(&mut self, dev: &mut D) -> XmodemResult<()> {
         loop {
             dev.write_all(&[Consts::EOT.into()])?;
 

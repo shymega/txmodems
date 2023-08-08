@@ -1,12 +1,18 @@
+//! Feature-flag guarded module for different X/Y/Z-MODEM implementations.
+
 mod api;
 
 #[cfg(feature = "xmodem")]
 pub mod xmodem {
+    //! XMODEM module for XMODEM communications.
+    //! Guarded by the `xmodem` feature flag.
+    //! Disabled by default.
     pub(crate) use crate::common;
     pub use crate::variants::api::xmodem::*;
 
     #[derive(Default, Debug, Copy, Clone)]
     #[repr(u8)]
+    #[allow(missing_docs)]
     pub enum Consts {
         NUL = 0x00,
         SOH = 0x01,
