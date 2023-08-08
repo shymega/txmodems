@@ -41,11 +41,9 @@ impl Default for Xmodem {
     }
 }
 
-impl Xmodem {
-    /// Creates the XMODEM config with default parameters.
-    #[must_use]
-    pub fn new() -> Self {
-        Xmodem {
+impl Modem for Xmodem {
+    fn new() -> Self where Self: Sized {
+        Self {
             max_errors: 16,
             pad_byte: 0x1a,
             block_length: BlockLengthKind::Standard,
@@ -54,54 +52,27 @@ impl Xmodem {
         }
     }
 
-    /// Starts the XMODEM transmission.
-    ///
-    /// `dev` should be the serial communication channel (e.g. the serial device).
-    /// `stream` should be the message to send (e.g. a file).
-    ///
-    /// # Timeouts
-    /// This method has no way of setting the timeout of `dev`, so it's up to the caller
-    /// to set the timeout of the device before calling this method. Timeouts on receiving
-    /// bytes will be counted against `max_errors`, but timeouts on transmitting bytes
-    /// will be considered a fatal error.
-    pub fn send<D: Read + Write, R: Read>(
-        &mut self,
-        dev: &mut D,
-        stream: &mut R,
-    ) -> XmodemResult<()> {
+    fn send<D, R>(&mut self, dev: &mut D, inp: &mut R) -> ModemResult<()> where D: Read + Write, R: Read {
         self.errors = 0;
 
         debug!("Starting XMODEM transfer");
-        self.start_send(dev)?;
+        self.init_send(dev)?;
+
         debug!("First byte received. Sending stream.");
-        self.send_stream(dev, stream)?;
+        self.send_stream(dev, inp)?;
+
         debug!("Sending EOT");
         self.finish_send(dev)?;
 
         Ok(())
     }
 
-    /// Receive an XMODEM transmission.
-    ///
-    /// `dev` should be the serial communication channel (e.g. the serial device).
-    /// The received data will be written to `outstream`.
-    /// `checksum` indicates which checksum mode should be used; `ChecksumKind::Standard` is
-    /// a reasonable default.
-    ///
-    /// # Timeouts
-    /// This method has no way of setting the timeout of `dev`, so it's up to the caller
-    /// to set the timeout of the device before calling this method. Timeouts on receiving
-    /// bytes will be counted against `max_errors`, but timeouts on transmitting bytes
-    /// will be considered a fatal error.
-    pub fn recv<D: Read + Write, W: Write>(
-        &mut self,
-        dev: &mut D,
-        outstream: &mut W,
-        checksum: ChecksumKind,
-    ) -> XmodemResult<()> {
+    fn receive<D, W>(&mut self, dev: &mut D, out: &mut W, checksum: ChecksumKind) -> ModemResult<()> where D: Read + Write, W: Write {
         self.errors = 0;
         self.checksum_mode = checksum;
-        debug!("Starting XMODEM receive");
+
+        debug!("Starting XMODEM receiver");
+
         dev.write_all(&[match self.checksum_mode {
             ChecksumKind::Standard => Consts::NAK.into(),
             ChecksumKind::Crc16 => Consts::CRC.into(),
@@ -119,7 +90,7 @@ impl Xmodem {
                     };
                     let pnum = get_byte(dev)?; // specified packet number
                     let pnum_1c = get_byte(dev)?; // same, 1's complemented
-                                                  // We'll respond with cancel later if the packet number is wrong
+                    // We'll respond with cancel later if the packet number is wrong
                     let cancel_packet =
                         packet_num != pnum || (255 - pnum) != pnum_1c;
                     let mut data: Vec<u8> = Vec::new();
@@ -141,12 +112,12 @@ impl Xmodem {
                     if cancel_packet {
                         dev.write_all(&[Consts::CAN.into()])?;
                         dev.write_all(&[Consts::CAN.into()])?;
-                        return Err(Error::Canceled);
+                        return Err(ModemError::Canceled)
                     }
                     if success {
                         packet_num = packet_num.wrapping_add(1);
                         dev.write_all(&[Consts::ACK.into()])?;
-                        outstream.write_all(&data)?;
+                        out.write_all(&data)?;
                     } else {
                         dev.write_all(&[Consts::NAK.into()])?;
                         self.errors += 1;
@@ -169,15 +140,15 @@ impl Xmodem {
                     self.max_errors
                 );
                 dev.write_all(&[Consts::CAN.into()])?;
-                return Err(Error::ExhaustedRetries(Box::new(
-                    self.errors
-                )));
+                return Err(ModemError::ExhaustedRetries {
+                    errors: Box::from(self.errors),
+                });
             }
         }
         Ok(())
     }
 
-    fn start_send<D: Read + Write>(&mut self, dev: &mut D) -> XmodemResult<()> {
+    fn init_send<D>(&mut self, dev: &mut D) -> ModemResult<()> where D: Read + Write {
         let mut cancels = 0u32;
         loop {
             match get_byte_timeout(dev)?.map(Consts::from) {
@@ -213,7 +184,7 @@ impl Xmodem {
                     "Transmission canceled: received two cancel (CAN) bytes \
                         at start of XMODEM transfer"
                 );
-                return Err(Error::Canceled);
+                return Err(ModemError::Canceled);
             }
 
             if self.errors >= self.max_errors {
@@ -224,22 +195,46 @@ impl Xmodem {
                 if let Err(err) = dev.write_all(&[Consts::CAN.into()]) {
                     warn!("Error sending CAN byte: {}", err);
                 }
-                return Err(Error::ExhaustedRetries(Box::new(
-                    self.errors
-                )));
+                return Err(ModemError::ExhaustedRetries {
+                    errors: Box::from(self.errors)
+                });
             }
         }
     }
 
-    fn send_stream<D: Read + Write, R: Read>(
-        &mut self,
-        dev: &mut D,
-        stream: &mut R,
-    ) -> XmodemResult<()> {
+    fn finish_send<D>(&mut self, dev: &mut D) -> ModemResult<()> where D: Read + Write {
+        loop {
+            dev.write_all(&[Consts::EOT.into()])?;
+
+            if let Some(c) = get_byte_timeout(dev)? {
+                // Appease Clippy with this conditional black.
+                #[allow(clippy::redundant_else)]
+                if c == Consts::ACK.into() {
+                    info!("XMODEM transmission successful");
+                    return Ok(());
+                }
+                warn!("Expected ACK, got {}", c);
+            };
+
+            self.errors += 1;
+
+            if self.errors >= self.max_errors {
+                error!(
+                    "Exhausted max retries ({}) while waiting for ACK for EOT",
+                    self.max_errors
+                );
+                return Err(ModemError::ExhaustedRetries {
+                    errors: Box::from(self.errors)
+                });
+            }
+        }
+    }
+
+    fn send_stream<D, R>(&mut self, dev: &mut D, inp: &mut R) -> ModemResult<()> where D: Read + Write, R: Read {
         let mut block_num = 0u32;
         loop {
             let mut buff = vec![self.pad_byte; self.block_length as usize + 3];
-            let n = stream.read(&mut buff[3..])?;
+            let n = inp.read(&mut buff[3..])?;
             if n == 0 {
                 debug!("Reached EOF");
                 return Ok(());
@@ -271,13 +266,13 @@ impl Xmodem {
             match get_byte_timeout(dev)? {
                 Some(c) => {
                     // Appease Clippy with this conditional block.
-                    #[allow(clippy::redundant_else)]
+
                     if c == Consts::ACK.into() {
                         debug!("Received ACK for block {}", block_num);
                         continue;
-                    } else {
-                        warn!("Expected ACK, got {}", c);
                     }
+
+                    warn!("Expected ACK, got {}", c);
                     // TODO handle CAN bytes
                 }
                 None => {
@@ -290,66 +285,9 @@ impl Xmodem {
             if self.errors >= self.max_errors {
                 error!("Exhausted max retries ({}) while sending block {} in XMODEM transfer",
                        self.max_errors, block_num);
-                return Err(Error::ExhaustedRetries(Box::new(
-                    self.errors
-                )));
-            }
-        }
-    }
-
-    fn finish_send<D: Read + Write>(&mut self, dev: &mut D) -> XmodemResult<()> {
-        loop {
-            dev.write_all(&[Consts::EOT.into()])?;
-
-            if let Some(c) = get_byte_timeout(dev)? {
-                // Appease Clippy with this conditional black.
-                #[allow(clippy::redundant_else)]
-                if c == Consts::ACK.into() {
-                    info!("XMODEM transmission successful");
-                    return Ok(());
-                } else {
-                    warn!("Expected ACK, got {}", c);
-                }
-            };
-
-            self.errors += 1;
-
-            if self.errors >= self.max_errors {
-                error!(
-                    "Exhausted max retries ({}) while waiting for ACK for EOT",
-                    self.max_errors
-                );
-                return Err(Error::ExhaustedRetries(Box::new(
-                    self.errors
-                )));
-            }
-        }
-    }
-}
-
-fn calc_checksum(data: &[u8]) -> u8 {
-    data.iter().fold(0, |x, &y| x.wrapping_add(y))
-}
-
-fn calc_crc(data: &[u8]) -> u16 {
-    crc16::State::<crc16::XMODEM>::calculate(data)
-}
-
-fn get_byte<R: Read>(reader: &mut R) -> io::Result<u8> {
-    let mut buff = [0];
-    reader.read_exact(&mut buff)?;
-    Ok(buff[0])
-}
-
-/// Turns timeout errors into `Ok(None)`
-fn get_byte_timeout<R: Read>(reader: &mut R) -> io::Result<Option<u8>> {
-    match get_byte(reader) {
-        Ok(c) => Ok(Some(c)),
-        Err(err) => {
-            if err.kind() == io::ErrorKind::TimedOut {
-                Ok(None)
-            } else {
-                Err(err)
+                return Err(ModemError::ExhaustedRetries {
+                    errors: Box::from(self.errors)
+                });
             }
         }
     }
