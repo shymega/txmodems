@@ -4,9 +4,9 @@ use log::{debug, error, info, warn};
 
 use alloc::{boxed::Box, vec, vec::Vec};
 use core::convert::From;
-use core::fmt::{self, Formatter};
 
-use core2::io::{self, Read, Write};
+use core2::io::{Read, Write};
+use crate::common::{calc_checksum, calc_crc, get_byte, get_byte_timeout, Modem, ModemError, ModemResult};
 
 use crate::variants::xmodem::{common::{ChecksumKind, BlockLengthKind}, Consts};
 
@@ -14,33 +14,6 @@ use crate::variants::xmodem::{common::{ChecksumKind, BlockLengthKind}, Consts};
 // TODO: Handle CAN bytes while sending
 // TODO: Implement Error for Error
 
-type XmodemResult<T, E = Error> = Result<T, E>;
-
-/// Enum of various `Error` variants.
-#[derive(Debug)]
-pub enum Error {
-    /// Boxed `core2::io::Error`, used for storing I/O errors.
-    Io(Box<io::Error>),
-
-    /// The number of communications errors exceeded `max_errors` in a single
-    /// transmission.
-    ExhaustedRetries(Box<u32>),
-
-    /// The transmission was canceled by the other end of the channel.
-    Canceled,
-}
-
-impl From<io::Error> for Error {
-    fn from(err: io::Error) -> Error {
-        Error::Io(Box::new(err))
-    }
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "Error!")
-    }
-}
 
 /// Configuration for the XMODEM transfer.
 #[derive(Copy, Clone, Debug)]
