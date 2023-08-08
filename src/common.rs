@@ -41,8 +41,8 @@ pub enum ModemError {
 pub type ModemResult<T, E = ModemError> = Result<T, E>;
 
 mod utils {
-    use super::{Read, Result};
-    use core2::io::ErrorKind;
+    use super::Read;
+    use core2::io::{Result, ErrorKind};
 
     pub fn calc_checksum(data: &[u8]) -> u8 {
         data.iter().fold(0, |x, &y| x.wrapping_add(y))
