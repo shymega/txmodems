@@ -60,3 +60,49 @@ pub mod xmodem {
         }
     }
 }
+
+#[cfg(feature = "ymodem")]
+pub mod ymodem {
+    //! YMODEM module for YMODEM communications.
+    //! Guarded by the `xmodem` feature flag.
+    //! Disabled by default.
+    pub(crate) use crate::common;
+    pub use crate::variants::api::ymodem::*;
+
+    #[derive(Default, Debug, Copy, Clone)]
+    #[repr(u8)]
+    #[allow(missing_docs)]
+    pub enum Consts {
+        SOH = 0x01,
+        STX = 0x02,
+        EOT = 0x04,
+        ACK = 0x06,
+        NAK = 0x15,
+        CAN = 0x18,
+        CRC = 0x43,
+        #[default]
+        Unknown = 0x99,
+    }
+
+    impl From<Consts> for u8 {
+        fn from(v: Consts) -> Self {
+            v as Self
+        }
+    }
+
+    impl From<u8> for Consts {
+        fn from(v: u8) -> Self {
+            match v {
+                0x01 => Self::SOH,
+                0x02 => Self::STX,
+                0x04 => Self::EOT,
+                0x06 => Self::ACK,
+                0x15 => Self::NAK,
+                0x18 => Self::CAN,
+                0x43 => Self::CRC,
+                _ => Self::Unknown,
+            }
+        }
+    }
+
+}
