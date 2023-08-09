@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use alloc::boxed::Box;
+use alloc::string::String;
 
 use thiserror_no_std::Error;
 use anyhow::Result;
@@ -75,12 +76,14 @@ mod utils {
     }
 }
 
-pub trait Modem {
+pub trait ModemTrait {
     /// Return a new instance of the `Xmodem` struct.
     fn new() -> Self
-    where
-        Self: Sized;
+        where
+            Self: Sized;
+}
 
+pub trait XModemTrait : ModemTrait {
     /// Starts the XMODEM transmission.
     ///
     /// `dev` should be the serial communication channel (e.g. the serial device).
@@ -91,10 +94,7 @@ pub trait Modem {
     /// to set the timeout of the device before calling this method. Timeouts on receiving
     /// bytes will be counted against `max_errors`, but timeouts on transmitting bytes
     /// will be considered a fatal error.
-    fn send<D, R>(&mut self, dev: &mut D, inp: &mut R) -> ModemResult<()>
-    where
-        D: Read + Write,
-        R: Read;
+    fn send<D: Read + Write, R: Read>(&mut self, dev: &mut D, inp: &mut R) -> ModemResult<()>;
 
     /// Receive an XMODEM transmission.
     ///
@@ -108,32 +108,30 @@ pub trait Modem {
     /// to set the timeout of the device before calling this method. Timeouts on receiving
     /// bytes will be counted against `max_errors`, but timeouts on transmitting bytes
     /// will be considered a fatal error.
-    fn receive<D, W>(
+    fn receive<D: Read + Write, W: Write>(
         &mut self,
         dev: &mut D,
         out: &mut W,
         checksum: ChecksumKind,
-    ) -> ModemResult<()>
-    where
-        D: Read + Write,
-        W: Write;
+    ) -> ModemResult<()>;
 
     /// Internal function for initializing a transmission.
     /// FIXME: Document.
-    fn init_send<D>(&mut self, dev: &mut D) -> ModemResult<()>
-    where
-        D: Read + Write;
+    fn init_send<D: Read + Write>(&mut self, dev: &mut D) -> ModemResult<()>;
 
     /// Internal function for finishing a transmission.
     /// FIXME: Document.
-    fn finish_send<D>(&mut self, dev: &mut D) -> ModemResult<()>
-    where
-        D: Read + Write;
+    fn finish_send<D: Read + Write>(&mut self, dev: &mut D) -> ModemResult<()>;
 
     /// Internal function for sending a stream.
     /// FIXME: Document.
-    fn send_stream<D, R>(&mut self, dev: &mut D, inp: &mut R) -> ModemResult<()>
-    where
-        D: Read + Write,
-        R: Read;
+    fn send_stream<D: Read + Write, R: Read>(&mut self, dev: &mut D, inp: &mut R) -> ModemResult<()>;
+}
+
+pub trait YModemTrait : ModemTrait {
+    fn recv<D: Read + Write, W: Write>(&mut self, dev: &mut D, out: &mut W, file_name: &mut String, file_size: &mut u32) -> ModemResult<()> { Ok(()) }
+    fn send<D: Read + Write, R: Read>(&mut self, dev: &mut D, inp: &mut R, file_name: String, file_size: u64) -> ModemResult<()> { Ok(()) }
+    fn send_stream<D: Read + Write, R: Read>(&mut self, dev: &mut D, stream: &mut R, packets_to_send: u32, last_packet_size: u64) -> ModemResult<()> { Ok(()) }
+    fn send_start_frame<D: Read + Write>(&mut self, dev: &mut D, file_name: String, file_size: u64) -> ModemResult<()> { Ok(()) }
+    fn send_end_frame<D: Read + Write>(&mut self, dev: &mut D) -> ModemResult<()> { Ok(()) }
 }

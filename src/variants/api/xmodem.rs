@@ -1,10 +1,8 @@
-use log::{debug, error, info, warn};
-
 use alloc::{boxed::Box, vec, vec::Vec};
 use core::convert::From;
 
 use core2::io::{Read, Write};
-use crate::common::{calc_checksum, calc_crc, get_byte, get_byte_timeout, Modem, ModemError, ModemResult};
+use crate::common::{calc_checksum, calc_crc, get_byte, get_byte_timeout, ModemTrait, XModemTrait, ModemError, ModemResult};
 
 use crate::variants::xmodem::{common::{ChecksumKind, BlockLengthKind}, Consts};
 
@@ -43,17 +41,20 @@ impl ModemTrait for XModem {
             errors: 0,
         }
     }
+}
+
+impl XModemTrait for XModem {
 
     fn send<D, R>(&mut self, dev: &mut D, inp: &mut R) -> ModemResult<()> where D: Read + Write, R: Read {
         self.errors = 0;
 
-        debug!("Starting XMODEM transfer");
+
         self.init_send(dev)?;
 
-        debug!("First byte received. Sending stream.");
+
         self.send_stream(dev, inp)?;
 
-        debug!("Sending EOT");
+
         self.finish_send(dev)?;
 
         Ok(())
@@ -63,13 +64,12 @@ impl ModemTrait for XModem {
         self.errors = 0;
         self.checksum_mode = checksum;
 
-        debug!("Starting XMODEM receiver");
 
         dev.write_all(&[match self.checksum_mode {
             ChecksumKind::Standard => Consts::NAK.into(),
             ChecksumKind::Crc16 => Consts::CRC.into(),
         }])?;
-        debug!("NCG sent. Receiving stream.");
+
         let mut packet_num: u8 = 1;
         loop {
             match get_byte_timeout(dev)?.map(Consts::from) {
@@ -123,14 +123,9 @@ impl ModemTrait for XModem {
                 }
                 None => {
                     self.errors += 1;
-                    warn!("Timeout!");
                 }
             }
             if self.errors >= self.max_errors {
-                error!(
-                    "Exhausted max retries ({}) while waiting for ACK for EOT",
-                    self.max_errors
-                );
                 dev.write_all(&[Consts::CAN.into()])?;
                 return Err(ModemError::ExhaustedRetries {
                     errors: Box::from(self.errors),
@@ -146,46 +141,34 @@ impl ModemTrait for XModem {
             match get_byte_timeout(dev)?.map(Consts::from) {
                 Some(c) => match c {
                     Consts::NAK => {
-                        debug!("Standard checksum requested");
+
                         self.checksum_mode = ChecksumKind::Standard;
                         return Ok(());
                     }
                     Consts::CRC => {
-                        debug!("16-bit CRC requested");
+
                         self.checksum_mode = ChecksumKind::Crc16;
                         return Ok(());
                     }
                     Consts::CAN => {
-                        warn!("Cancel (CAN) byte received");
+
                         cancels += 1;
                     }
-                    c => warn!(
-                        "Unknown byte received at start of XMODEM transfer: {:?}",
-                        c
-                    ),
+                    c => ()
                 },
-                None => {
-                    warn!("Timed out waiting for start of XMODEM transfer.");
-                }
+                None => (),
             }
 
             self.errors += 1;
 
             if cancels >= 2 {
-                error!(
-                    "Transmission canceled: received two cancel (CAN) bytes \
-                        at start of XMODEM transfer"
-                );
                 return Err(ModemError::Canceled);
             }
 
             if self.errors >= self.max_errors {
-                error!(
-                    "Exhausted max retries ({}) at start of XMODEM transfer.",
-                    self.max_errors
-                );
+
                 if let Err(err) = dev.write_all(&[Consts::CAN.into()]) {
-                    warn!("Error sending CAN byte: {}", err);
+                    ()
                 }
                 return Err(ModemError::ExhaustedRetries {
                     errors: Box::from(self.errors)
@@ -202,19 +185,13 @@ impl ModemTrait for XModem {
                 // Appease Clippy with this conditional black.
                 #[allow(clippy::redundant_else)]
                 if c == Consts::ACK.into() {
-                    info!("XMODEM transmission successful");
                     return Ok(());
                 }
-                warn!("Expected ACK, got {}", c);
             };
 
             self.errors += 1;
 
             if self.errors >= self.max_errors {
-                error!(
-                    "Exhausted max retries ({}) while waiting for ACK for EOT",
-                    self.max_errors
-                );
                 return Err(ModemError::ExhaustedRetries {
                     errors: Box::from(self.errors)
                 });
@@ -228,7 +205,6 @@ impl ModemTrait for XModem {
             let mut buff = vec![self.pad_byte; self.block_length as usize + 3];
             let n = inp.read(&mut buff[3..])?;
             if n == 0 {
-                debug!("Reached EOF");
                 return Ok(());
             }
 
@@ -252,7 +228,6 @@ impl ModemTrait for XModem {
                 }
             }
 
-            debug!("Sending block {}", block_num);
             dev.write_all(&buff)?;
 
             match get_byte_timeout(dev)? {
@@ -260,23 +235,17 @@ impl ModemTrait for XModem {
                     // Appease Clippy with this conditional block.
 
                     if c == Consts::ACK.into() {
-                        debug!("Received ACK for block {}", block_num);
                         continue;
                     }
 
-                    warn!("Expected ACK, got {}", c);
                     // TODO handle CAN bytes
                 }
-                None => {
-                    warn!("Timeout waiting for ACK for block {}", block_num);
-                }
+                None => ()
             }
 
             self.errors += 1;
 
             if self.errors >= self.max_errors {
-                error!("Exhausted max retries ({}) while sending block {} in XMODEM transfer",
-                       self.max_errors, block_num);
                 return Err(ModemError::ExhaustedRetries {
                     errors: Box::from(self.errors)
                 });
