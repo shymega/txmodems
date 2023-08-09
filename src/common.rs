@@ -7,14 +7,16 @@ use anyhow::Result;
 use core2::io::{Error, Read, Write};
 pub use utils::*;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Default, Copy, Clone, Debug)]
 pub enum ChecksumKind {
+    #[default]
     Standard,
     Crc16,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Default, Copy, Clone, Debug)]
 pub enum BlockLengthKind {
+    #[default]
     Standard = 128,
     OneK = 1024,
 }

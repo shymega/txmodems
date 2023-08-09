@@ -13,9 +13,9 @@ use crate::variants::xmodem::{common::{ChecksumKind, BlockLengthKind}, Consts};
 // TODO: Implement Error for Error
 
 
-/// Configuration for the XMODEM transfer.
-#[derive(Copy, Clone, Debug)]
-pub struct Xmodem {
+/// `Xmodem` acts as state for XMODEM transfers
+#[derive(Default, Debug, Copy, Clone)]
+pub struct XModem {
     /// The number of errors that can occur before the communication is
     /// considered a failure. Errors include unexpected bytes and timeouts waiting for bytes.
     pub max_errors: u32,
@@ -33,13 +33,7 @@ pub struct Xmodem {
     errors: u32,
 }
 
-impl Default for Xmodem {
-    fn default() -> Self {
-        Xmodem::new()
-    }
-}
-
-impl Modem for Xmodem {
+impl ModemTrait for XModem {
     fn new() -> Self where Self: Sized {
         Self {
             max_errors: 16,
