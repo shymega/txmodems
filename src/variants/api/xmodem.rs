@@ -138,10 +138,9 @@ impl XModemTrait for XModem {
     fn init_send<D>(&mut self, dev: &mut D) -> ModemResult<()> where D: Read + Write {
         let mut cancels = 0u32;
         loop {
-            match get_byte_timeout(dev)?.map(Consts::from) {
-                Some(c) => match c {
+            if let Some(c) = get_byte_timeout(dev)?.map(Consts::from) {
+                match c {
                     Consts::NAK => {
-
                         self.checksum_mode = ChecksumKind::Standard;
                         return Ok(());
                     }
@@ -154,9 +153,8 @@ impl XModemTrait for XModem {
 
                         cancels += 1;
                     }
-                    c => ()
-                },
-                None => (),
+                    _c => ()
+                }
             }
 
             self.errors += 1;
@@ -166,10 +164,7 @@ impl XModemTrait for XModem {
             }
 
             if self.errors >= self.max_errors {
-
-                if let Err(err) = dev.write_all(&[Consts::CAN.into()]) {
-                    ()
-                }
+                // FIXME: Removed a unused 'if let' here. To be re-added?
                 return Err(ModemError::ExhaustedRetries {
                     errors: Box::from(self.errors)
                 });
@@ -230,17 +225,11 @@ impl XModemTrait for XModem {
 
             dev.write_all(&buff)?;
 
-            match get_byte_timeout(dev)? {
-                Some(c) => {
-                    // Appease Clippy with this conditional block.
-
-                    if c == Consts::ACK.into() {
-                        continue;
-                    }
-
-                    // TODO handle CAN bytes
+            if let Some(c) = get_byte_timeout(dev)? {
+                if c == Consts::ACK.into() {
+                    continue;
                 }
-                None => ()
+                // TODO handle CAN bytes
             }
 
             self.errors += 1;
