@@ -128,10 +128,11 @@ pub trait XModemTrait : ModemTrait {
     fn send_stream<D: Read + Write, R: Read>(&mut self, dev: &mut D, inp: &mut R) -> ModemResult<()>;
 }
 
+#[allow(dead_code)] // TODO: Temporarily allow this lint, whilst I work out YMODEM support.
 pub trait YModemTrait : ModemTrait {
-    fn recv<D: Read + Write, W: Write>(&mut self, dev: &mut D, out: &mut W, file_name: &mut String, file_size: &mut u32) -> ModemResult<()> { Ok(()) }
-    fn send<D: Read + Write, R: Read>(&mut self, dev: &mut D, inp: &mut R, file_name: String, file_size: u64) -> ModemResult<()> { Ok(()) }
-    fn send_stream<D: Read + Write, R: Read>(&mut self, dev: &mut D, stream: &mut R, packets_to_send: u32, last_packet_size: u64) -> ModemResult<()> { Ok(()) }
-    fn send_start_frame<D: Read + Write>(&mut self, dev: &mut D, file_name: String, file_size: u64) -> ModemResult<()> { Ok(()) }
-    fn send_end_frame<D: Read + Write>(&mut self, dev: &mut D) -> ModemResult<()> { Ok(()) }
+    fn recv<D: Read + Write, W: Write>(&mut self, dev: &mut D, out: &mut W, file_name: &mut String, file_size: &mut u32) -> ModemResult<()>;
+    fn send<D: Read + Write, R: Read>(&mut self, dev: &mut D, inp: &mut R, file_name: String, file_size: u64) -> ModemResult<()>;
+    fn send_stream<D: Read + Write, R: Read>(&mut self, dev: &mut D, stream: &mut R, packets_to_send: u32, last_packet_size: u64) -> ModemResult<()>;
+    fn send_start_frame<D: Read + Write>(&mut self, dev: &mut D, file_name: String, file_size: u64) -> ModemResult<()>;
+    fn send_end_frame<D: Read + Write>(&mut self, dev: &mut D) -> ModemResult<()>;
 }
