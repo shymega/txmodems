@@ -1,7 +1,8 @@
-use crate::common::{ModemTrait, YModemTrait};
+use crate::common::ModemTrait;
 
 /// `YModem` acts as state for XMODEM transfers
 #[derive(Default, Debug, Copy, Clone)]
+#[allow(dead_code)] // TODO: Temporarily allow this lint, whilst I work out YMODEM support.
 pub struct YModem {
     /// The number of errors that can occur before the communication is
     /// considered a failure. Errors include unexpected bytes and timeouts waiting for bytes.

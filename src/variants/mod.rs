@@ -66,7 +66,6 @@ pub mod ymodem {
     //! YMODEM module for YMODEM communications.
     //! Guarded by the `xmodem` feature flag.
     //! Disabled by default.
-    pub(crate) use crate::common;
     pub use crate::variants::api::ymodem::*;
 
     #[derive(Default, Debug, Copy, Clone)]
