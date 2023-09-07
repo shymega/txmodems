@@ -6,11 +6,9 @@ use crate::common::ModemTrait;
 pub struct YModem {
     /// The number of errors that can occur before the communication is
     /// considered a failure. Errors include unexpected bytes and timeouts waiting for bytes.
-
     pub max_errors: u32,
     /// The number of *initial errors* that can occur before the communication is
     /// considered a failure. Errors include unexpected bytes and timeouts waiting for bytes.
-
     pub max_initial_errors: u32,
 
     /// The byte used to pad the last block. XMODEM can only send blocks of a certain size,
@@ -25,14 +23,17 @@ pub struct YModem {
 }
 
 impl ModemTrait for YModem {
-    fn new() -> Self where Self: Sized {
+    fn new() -> Self
+    where
+        Self: Sized,
+    {
         Self {
             max_errors: 16,
             max_initial_errors: 16,
             pad_byte: 0x1a,
             errors: 0,
             initial_errors: 0,
-            ignore_non_digits_on_file_size: false
+            ignore_non_digits_on_file_size: false,
         }
     }
 }

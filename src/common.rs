@@ -3,9 +3,9 @@
 use alloc::boxed::Box;
 use alloc::string::String;
 
-use thiserror_no_std::Error;
 use anyhow::Result;
 use core2::io::{Error, Read, Write};
+use thiserror_no_std::Error;
 pub use utils::*;
 
 #[derive(Default, Copy, Clone, Debug)]
@@ -32,9 +32,7 @@ pub enum ModemError {
     /// The number of communications errors exceeded `max_errors` in a single
     /// transmission.
     #[error("Too many errors, aborting - max errors: {errors}")]
-    ExhaustedRetries {
-        errors: Box<u32>
-    },
+    ExhaustedRetries { errors: Box<u32> },
 
     /// The transmission was canceled by the other end of the channel.
     #[error("Cancelled by the other party.")]
@@ -45,7 +43,7 @@ pub type ModemResult<T, E = ModemError> = Result<T, E>;
 
 mod utils {
     use super::Read;
-    use core2::io::{Result, ErrorKind};
+    use core2::io::{ErrorKind, Result};
 
     pub fn calc_checksum(data: &[u8]) -> u8 {
         data.iter().fold(0, |x, &y| x.wrapping_add(y))
@@ -79,11 +77,11 @@ mod utils {
 pub trait ModemTrait {
     /// Return a new instance of the `Xmodem` struct.
     fn new() -> Self
-        where
-            Self: Sized;
+    where
+        Self: Sized;
 }
 
-pub trait XModemTrait : ModemTrait {
+pub trait XModemTrait: ModemTrait {
     /// Starts the XMODEM transmission.
     ///
     /// `dev` should be the serial communication channel (e.g. the serial device).
@@ -94,7 +92,11 @@ pub trait XModemTrait : ModemTrait {
     /// to set the timeout of the device before calling this method. Timeouts on receiving
     /// bytes will be counted against `max_errors`, but timeouts on transmitting bytes
     /// will be considered a fatal error.
-    fn send<D: Read + Write, R: Read>(&mut self, dev: &mut D, inp: &mut R) -> ModemResult<()>;
+    fn send<D: Read + Write, R: Read>(
+        &mut self,
+        dev: &mut D,
+        inp: &mut R,
+    ) -> ModemResult<()>;
 
     /// Receive an XMODEM transmission.
     ///
@@ -125,14 +127,44 @@ pub trait XModemTrait : ModemTrait {
 
     /// Internal function for sending a stream.
     /// FIXME: Document.
-    fn send_stream<D: Read + Write, R: Read>(&mut self, dev: &mut D, inp: &mut R) -> ModemResult<()>;
+    fn send_stream<D: Read + Write, R: Read>(
+        &mut self,
+        dev: &mut D,
+        inp: &mut R,
+    ) -> ModemResult<()>;
 }
 
 #[allow(dead_code)] // TODO: Temporarily allow this lint, whilst I work out YMODEM support.
-pub trait YModemTrait : ModemTrait {
-    fn recv<D: Read + Write, W: Write>(&mut self, dev: &mut D, out: &mut W, file_name: &mut String, file_size: &mut u32) -> ModemResult<()>;
-    fn send<D: Read + Write, R: Read>(&mut self, dev: &mut D, inp: &mut R, file_name: String, file_size: u64) -> ModemResult<()>;
-    fn send_stream<D: Read + Write, R: Read>(&mut self, dev: &mut D, stream: &mut R, packets_to_send: u32, last_packet_size: u64) -> ModemResult<()>;
-    fn send_start_frame<D: Read + Write>(&mut self, dev: &mut D, file_name: String, file_size: u64) -> ModemResult<()>;
-    fn send_end_frame<D: Read + Write>(&mut self, dev: &mut D) -> ModemResult<()>;
+pub trait YModemTrait: ModemTrait {
+    fn recv<D: Read + Write, W: Write>(
+        &mut self,
+        dev: &mut D,
+        out: &mut W,
+        file_name: &mut String,
+        file_size: &mut u32,
+    ) -> ModemResult<()>;
+    fn send<D: Read + Write, R: Read>(
+        &mut self,
+        dev: &mut D,
+        inp: &mut R,
+        file_name: String,
+        file_size: u64,
+    ) -> ModemResult<()>;
+    fn send_stream<D: Read + Write, R: Read>(
+        &mut self,
+        dev: &mut D,
+        stream: &mut R,
+        packets_to_send: u32,
+        last_packet_size: u64,
+    ) -> ModemResult<()>;
+    fn send_start_frame<D: Read + Write>(
+        &mut self,
+        dev: &mut D,
+        file_name: String,
+        file_size: u64,
+    ) -> ModemResult<()>;
+    fn send_end_frame<D: Read + Write>(
+        &mut self,
+        dev: &mut D,
+    ) -> ModemResult<()>;
 }

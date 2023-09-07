@@ -1,15 +1,20 @@
 use alloc::{boxed::Box, vec, vec::Vec};
 use core::convert::From;
 
+use crate::common::{
+    calc_checksum, calc_crc, get_byte, get_byte_timeout, ModemError,
+    ModemResult, ModemTrait, XModemTrait,
+};
 use core2::io::{Read, Write};
-use crate::common::{calc_checksum, calc_crc, get_byte, get_byte_timeout, ModemTrait, XModemTrait, ModemError, ModemResult};
 
-use crate::variants::xmodem::{common::{ChecksumKind, BlockLengthKind}, Consts};
+use crate::variants::xmodem::{
+    common::{BlockLengthKind, ChecksumKind},
+    Consts,
+};
 
 // TODO: Send CAN byte after too many errors
 // TODO: Handle CAN bytes while sending
 // TODO: Implement Error for Error
-
 
 /// `Xmodem` acts as state for XMODEM transfers
 #[derive(Default, Debug, Copy, Clone)]
@@ -32,7 +37,10 @@ pub struct XModem {
 }
 
 impl ModemTrait for XModem {
-    fn new() -> Self where Self: Sized {
+    fn new() -> Self
+    where
+        Self: Sized,
+    {
         Self {
             max_errors: 16,
             pad_byte: 0x1a,
@@ -44,26 +52,34 @@ impl ModemTrait for XModem {
 }
 
 impl XModemTrait for XModem {
-
-    fn send<D, R>(&mut self, dev: &mut D, inp: &mut R) -> ModemResult<()> where D: Read + Write, R: Read {
+    fn send<D, R>(&mut self, dev: &mut D, inp: &mut R) -> ModemResult<()>
+    where
+        D: Read + Write,
+        R: Read,
+    {
         self.errors = 0;
-
 
         self.init_send(dev)?;
 
-
         self.send_stream(dev, inp)?;
-
 
         self.finish_send(dev)?;
 
         Ok(())
     }
 
-    fn receive<D, W>(&mut self, dev: &mut D, out: &mut W, checksum: ChecksumKind) -> ModemResult<()> where D: Read + Write, W: Write {
+    fn receive<D, W>(
+        &mut self,
+        dev: &mut D,
+        out: &mut W,
+        checksum: ChecksumKind,
+    ) -> ModemResult<()>
+    where
+        D: Read + Write,
+        W: Write,
+    {
         self.errors = 0;
         self.checksum_mode = checksum;
-
 
         dev.write_all(&[match self.checksum_mode {
             ChecksumKind::Standard => Consts::NAK.into(),
@@ -82,7 +98,7 @@ impl XModemTrait for XModem {
                     };
                     let pnum = get_byte(dev)?; // specified packet number
                     let pnum_1c = get_byte(dev)?; // same, 1's complemented
-                    // We'll respond with cancel later if the packet number is wrong
+                                                  // We'll respond with cancel later if the packet number is wrong
                     let cancel_packet =
                         packet_num != pnum || (255 - pnum) != pnum_1c;
                     let mut data: Vec<u8> = Vec::new();
@@ -104,7 +120,7 @@ impl XModemTrait for XModem {
                     if cancel_packet {
                         dev.write_all(&[Consts::CAN.into()])?;
                         dev.write_all(&[Consts::CAN.into()])?;
-                        return Err(ModemError::Canceled)
+                        return Err(ModemError::Canceled);
                     }
                     if success {
                         packet_num = packet_num.wrapping_add(1);
@@ -135,7 +151,10 @@ impl XModemTrait for XModem {
         Ok(())
     }
 
-    fn init_send<D>(&mut self, dev: &mut D) -> ModemResult<()> where D: Read + Write {
+    fn init_send<D>(&mut self, dev: &mut D) -> ModemResult<()>
+    where
+        D: Read + Write,
+    {
         let mut cancels = 0u32;
         loop {
             if let Some(c) = get_byte_timeout(dev)?.map(Consts::from) {
@@ -145,15 +164,13 @@ impl XModemTrait for XModem {
                         return Ok(());
                     }
                     Consts::CRC => {
-
                         self.checksum_mode = ChecksumKind::Crc16;
                         return Ok(());
                     }
                     Consts::CAN => {
-
                         cancels += 1;
                     }
-                    _c => ()
+                    _c => (),
                 }
             }
 
@@ -166,13 +183,16 @@ impl XModemTrait for XModem {
             if self.errors >= self.max_errors {
                 // FIXME: Removed a unused 'if let' here. To be re-added?
                 return Err(ModemError::ExhaustedRetries {
-                    errors: Box::from(self.errors)
+                    errors: Box::from(self.errors),
                 });
             }
         }
     }
 
-    fn finish_send<D>(&mut self, dev: &mut D) -> ModemResult<()> where D: Read + Write {
+    fn finish_send<D>(&mut self, dev: &mut D) -> ModemResult<()>
+    where
+        D: Read + Write,
+    {
         loop {
             dev.write_all(&[Consts::EOT.into()])?;
 
@@ -188,13 +208,17 @@ impl XModemTrait for XModem {
 
             if self.errors >= self.max_errors {
                 return Err(ModemError::ExhaustedRetries {
-                    errors: Box::from(self.errors)
+                    errors: Box::from(self.errors),
                 });
             }
         }
     }
 
-    fn send_stream<D, R>(&mut self, dev: &mut D, inp: &mut R) -> ModemResult<()> where D: Read + Write, R: Read {
+    fn send_stream<D, R>(&mut self, dev: &mut D, inp: &mut R) -> ModemResult<()>
+    where
+        D: Read + Write,
+        R: Read,
+    {
         let mut block_num = 0u32;
         loop {
             let mut buff = vec![self.pad_byte; self.block_length as usize + 3];
@@ -236,7 +260,7 @@ impl XModemTrait for XModem {
 
             if self.errors >= self.max_errors {
                 return Err(ModemError::ExhaustedRetries {
-                    errors: Box::from(self.errors)
+                    errors: Box::from(self.errors),
                 });
             }
         }
