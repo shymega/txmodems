@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+extern crate alloc;
+
 use alloc::boxed::Box;
 use alloc::string::String;
 
