@@ -16,6 +16,7 @@
     variant_size_differences
 )]
 
+extern crate alloc;
 
 mod common;
 pub mod variants;
