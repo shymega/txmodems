@@ -1,11 +1,11 @@
 [package]
 name = "txmodems"
 readme = "README.md"
-repository = "https://github.com/shymega/txmodems"
-description = "Rust library for Various MODEM file transfer protocols"
-categories = ["rust", "data-transfer", "MODEM", "file-transfer"]
-keywords = ["rust", "data-transfer", "MODEM", "file-transfer"]
-version = "0.1.1"
+repository = "https://github.com/Cosmo-CoDiOS/txmodems"
+description = "Rust library for various MODEM file transfer protocols"
+categories = ["embedded"]
+keywords = ["data-transfer", "MODEM", "file-transfer", "embedded"]
+version = "0.1.2"
 authors = ["Dom Rodriguez <shymega@shymega.org.uk>"]
 license = "MIT"
 edition = "2021"
