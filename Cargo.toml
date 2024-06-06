@@ -1,12 +1,16 @@
 [package]
 name = "txmodems"
 readme = "README.md"
-repository = "https://github.com/Cosmo-CoDiOS/txmodems"
+repository = "https://github.com/inApril-AS/txmodems"
 description = "Rust library for various MODEM file transfer protocols"
 categories = ["embedded"]
-keywords = ["data-transfer", "MODEM", "file-transfer", "embedded"]
-version = "0.1.3"
-authors = ["Dom Rodriguez <shymega@shymega.org.uk>"]
+keywords = ["serial", "xmodem", "ymodem", "data-transfer", "MODEM", "file-transfer", "embedded"]
+version = "0.2.0"
+authors = [
+	"Dom Rodriguez <shymega@shymega.org.uk>",
+	"Eliud de León <eliud.deleon.10@gmail.com>",
+	"Eskild Jonatan Krumsvik Aanensen <eskild.krumsvik.aanensen@inapril.com>",
+]
 license = "MIT"
 edition = "2021"
 
@@ -14,13 +18,14 @@ edition = "2021"
 all-features = true
 
 [features]
-default = []
 xmodem = []
 ymodem = []
 zmodem = []
 
 [dependencies]
+anyhow = { version = "1.0.75", default-features = false }
 core2 = { version = "0.4.0", default-features = false }
 crc16 = "0.4.0"
+defmt = { version = "0.3", optional = true }
+heapless = "0.8.0"
 thiserror-no-std = "2.0.2"
-anyhow = { version = "1.0.75", default-features = false }
