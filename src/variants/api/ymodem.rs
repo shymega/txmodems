@@ -1,5 +1,6 @@
 use core::str::from_utf8;
 use core2::io::*;
+use alloc;
 
 use crate::common::*;
 #[cfg(defmt)]

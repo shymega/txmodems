@@ -64,7 +64,7 @@ pub mod xmodem {
 #[cfg(feature = "ymodem")]
 pub mod ymodem {
     //! YMODEM module for YMODEM communications.
-    //! Guarded by the `xmodem` feature flag.
+    //! Guarded by the `ymodem` feature flag.
     //! Disabled by default.
     pub use crate::variants::api::ymodem::*;
 
