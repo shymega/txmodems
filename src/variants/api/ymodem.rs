@@ -1,5 +1,8 @@
 use core::str::from_utf8;
+#[cfg(core2)]
 use core2::io::*;
+#[cfg(embedded_io_async)]
+use embedded_io_async::*;
 
 use crate::variants::ymodem::Consts;
 use crate::common::*;
@@ -60,6 +63,7 @@ impl ModemTrait for YModem {
     }
 }
 
+#[cfg(any(core2, embedded_io_async))]
 impl YModemTrait for YModem {
     /// Receive a YMODEM transmission.
     ///

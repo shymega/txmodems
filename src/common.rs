@@ -2,11 +2,15 @@
 
 #![allow(dead_code)]
 
-use heapless::String;
 
 use anyhow::Result;
+#[cfg(core2)]
 use core2::io::{Error, Read, Write};
+#[cfg(embedded_io_async)]
+use embedded_io_async::{Error, Read, Write};
+use heapless::String;
 use thiserror_no_std::Error;
+#[cfg(any(core2, embedded_io_async))]
 pub use utils::*;
 
 /// Which Checksum is used
@@ -34,6 +38,7 @@ pub enum BlockLengthKind {
 pub enum ModemError {
     /// Boxed `core2::io::Error`, used for storing I/O errors.
     #[error("Error during I/O on the channel.")]
+    #[cfg(any(core2, embedded_io_async))]
     Io(#[from] Error),
 
     /// The number of communications errors exceeded `max_errors` in a single
@@ -52,9 +57,13 @@ pub enum ModemError {
 /// Modem Result type
 pub type ModemResult<T, E = ModemError> = Result<T, E>;
 
+#[cfg(any(core2, embedded_io_async))]
 mod utils {
     use super::Read;
+    #[cfg(core2)]
     use core2::io::{ErrorKind, Result};
+    #[cfg(embedded_io_async)]
+    use embedded_io_async::ErrorKind;
 
     /// Calculate checksum
     pub fn calc_checksum(data: &[u8]) -> u8 {
@@ -97,6 +106,7 @@ pub trait ModemTrait {
 }
 
 /// Xmodem specific
+#[cfg(any(core2, embedded_io_async))]
 pub trait XModemTrait: ModemTrait {
     /// Starts the XMODEM transmission.
     ///
@@ -151,6 +161,7 @@ pub trait XModemTrait: ModemTrait {
 }
 
 /// Ymodem specific trait
+#[cfg(any(core2, embedded_io_async))]
 #[allow(dead_code)] // TODO: Temporarily allow this lint, whilst I work out YMODEM support.
 pub trait YModemTrait: ModemTrait {
     /// Receive an YMODEM transmission.

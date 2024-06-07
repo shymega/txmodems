@@ -24,7 +24,8 @@ zmodem = []
 
 [dependencies]
 anyhow = { version = "1.0.75", default-features = false }
-core2 = { version = "0.4.0", default-features = false }
+core2 = { version = "0.4.0", default-features = false, optional = true }
+embedded-io-async = { version = "0.6.1", optional = true }
 crc16 = "0.4.0"
 defmt = { version = "0.3", optional = true }
 heapless = "0.8.0"
