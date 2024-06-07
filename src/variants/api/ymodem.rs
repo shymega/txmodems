@@ -1,18 +1,11 @@
 use core::str::from_utf8;
 use core2::io::*;
 
+use crate::variants::ymodem::Consts;
 use crate::common::*;
 #[cfg(defmt)]
 use defmt::*;
 use heapless::{String, Vec};
-
-const SOH: u8 = 0x01;
-const STX: u8 = 0x02;
-const EOT: u8 = 0x04;
-const ACK: u8 = 0x06;
-const NAK: u8 = 0x15;
-const CAN: u8 = 0x18;
-const CRC: u8 = 0x43;
 
 /// `YModem` acts as state for XMODEM transfers
 #[derive(Default, Debug, Copy, Clone)]
@@ -94,12 +87,12 @@ impl YModemTrait for YModem {
         debug!("Starting YMODEM receive");
 
         loop {
-            dev.write(&[CRC])?;
+            dev.write(&[Consts::CRC.into()])?;
 
             match get_byte_timeout(dev) {
                 Ok(v) => {
                     // the first SOH is used to initialize the transfer
-                    if v == Some(SOH) {
+                    if v == Some(Consts::SOH.into()) {
                         break;
                     }
                 },
@@ -157,18 +150,18 @@ impl YModemTrait for YModem {
             let success = calc_crc(&mut data_buf) == recv_checksum;
 
             if cancel_packet {
-                (dev.write(&[CAN]))?;
-                (dev.write(&[CAN]))?;
+                dev.write(&[Consts::CAN.into()])?;
+                dev.write(&[Consts::CAN.into()])?;
                 return Err(ModemError::Canceled);
             }
             if !success {
-                (dev.write(&[NAK]))?;
+                dev.write(&[Consts::NAK.into()])?;
                 self.errors += 1;
             } else {
                 // First packet recieved succesfully
                 packet_num = packet_num.wrapping_add(1);
-                (dev.write(&[ACK]))?;
-                (dev.write(&[CRC]))?;
+                dev.write(&[Consts::ACK.into()])?;
+                dev.write(&[Consts::CRC.into()])?;
                 break;
             }
 
@@ -192,12 +185,12 @@ impl YModemTrait for YModem {
         for range in 0..=final_packet {
             #[cfg(defmt)]
             debug!("{}", range);
-            match get_byte_timeout(dev)? {
-                bt @ Some(SOH) | bt @ Some(STX) => {
+            match get_byte_timeout(dev)?.map(Consts::from) {
+                bt @ Some(Consts::SOH) | bt @ Some(Consts::STX) => {
                     // handle next packet
                     let packet_size = match bt {
-                        Some(SOH) => 128,
-                        Some(STX) => 1024,
+                        Some(Consts::SOH) => 128,
+                        Some(Consts::STX) => 1024,
                         _ => 0,
                     };
                     let pnum = get_byte(dev)?;      // specifed packet number
@@ -215,30 +208,30 @@ impl YModemTrait for YModem {
                     let success = calc_crc(&data) == recv_checksum;
 
                     if cancel_packet {
-                        dev.write(&[CAN])?;
-                        dev.write(&[CAN])?;
+                        dev.write(&[Consts::CAN.into()])?;
+                        dev.write(&[Consts::CAN.into()])?;
                         return Err(ModemError::Canceled);
                     }
                     if success {
                         packet_num = packet_num.wrapping_add(1);
-                        dev.write(&[ACK])?;
+                        dev.write(&[Consts::ACK.into()])?;
                         let array = &data.into_array::<1024>().unwrap();
                         let s = from_utf8(array.as_slice()).unwrap();
                         core::fmt::Write::write_str(&mut file_buf, s).unwrap();
                     } else {
-                        dev.write(&[NAK])?;
+                        dev.write(&[Consts::NAK.into()])?;
                         self.add_error()?;
                     }
                 },
-                Some(EOT) => {
+                Some(Consts::EOT) => {
                     packet_num = packet_num.wrapping_add(1);
                     // End of file
                     if !received_first_eot {
-                        dev.write(&[NAK])?;
+                        dev.write(&[Consts::NAK.into()])?;
                         received_first_eot = true;
                     } else {
-                        dev.write(&[ACK])?;
-                        dev.write(&[CRC])?;
+                        dev.write(&[Consts::ACK.into()])?;
+                        dev.write(&[Consts::CRC.into()])?;
                     }
                 }
                 Some(_) => {
@@ -301,13 +294,13 @@ impl YModemTrait for YModem {
     fn start_send<D: Read + Write>(&mut self, dev: &mut D) -> ModemResult<()> {
         let mut cancels = 0u32;
         loop {
-            match get_byte_timeout(dev)? {
-                Some(CRC) => {
+            match get_byte_timeout(dev)?.map(Consts::from) {
+                Some(Consts::CRC) => {
                     #[cfg(defmt)]
                     debug!("16-bit CRC requested");
                     return Ok(());
                 },
-                Some(CAN) => {
+                Some(Consts::CAN) => {
                     #[cfg(defmt)]
                     warn!("Cancel (CAN) byte recived");
                     cancels += 1;
@@ -331,7 +324,7 @@ impl YModemTrait for YModem {
             if self.errors >= self.max_errors {
                 #[cfg(defmt)]
                 error!("Exhausted max retries ({}) at start of YMODEM transfer.", self.max_errors);
-                if let Err(err) = dev.write_all(&[CAN]) {
+                if let Err(err) = dev.write_all(&[Consts::CAN.into()]) {
                     #[cfg(defmt)]
                     warn!("Error sending CAN byte: {}", err);
                 }
@@ -347,7 +340,7 @@ impl YModemTrait for YModem {
         file_size: u64,
     ) -> ModemResult<()> {
         let mut buf = [0; 128 + 5];
-        buf[0] = SOH;
+        buf[0] = Consts::SOH.into();
         buf[1] = 0x00;
         buf[2] = 0xFF;
 
@@ -374,14 +367,14 @@ impl YModemTrait for YModem {
         dev.write_all(&buf)?;
 
         loop {
-            match get_byte_timeout(dev)? {
-                Some(ACK)   => {
+            match get_byte_timeout(dev)?.map(Consts::from) {
+                Some(Consts::ACK)   => {
                     #[cfg(defmt)]
                     debug!("Recived ACK for start frame");
                     break;
                 },
                 #[cfg(defmt)]
-                Some(CAN)   => warn!("TODO: handle cancel"),
+                Some(Consts::CAN)   => warn!("TODO: handle cancel"),
                 #[cfg(defmt)]
                 Some(c)     => warn!("Expected ACK, got {}", c),
                 #[cfg(defmt)]
@@ -392,14 +385,14 @@ impl YModemTrait for YModem {
             self.add_error()?;
         }
         loop {
-            match get_byte_timeout(dev)? {
-                Some(CRC)   => {
+            match get_byte_timeout(dev)?.map(Consts::from) {
+                Some(Consts::CRC)   => {
                     #[cfg(defmt)]
                     debug!("Recieved C for start frame");
                     break;
                 },
                 #[cfg(defmt)]
-                Some(CAN)   => warn!("TODO: handle cancel"),
+                Some(Consts::CAN)   => warn!("TODO: handle cancel"),
                 #[cfg(defmt)]
                 Some(c)     => warn!("Expected C, got {}", c),
                 #[cfg(defmt)]
@@ -437,9 +430,9 @@ impl YModemTrait for YModem {
 
             block_num += 1;
             if packet_size == 128 {
-                buf[0] = SOH;
+                buf[0] = Consts::SOH.into();
             } else {
-                buf[0] = STX;
+                buf[0] = Consts::STX.into();
             }
             buf[1] = (block_num & 0xFF) as u8;
             buf[2] = 0xFF - buf[1];
@@ -452,14 +445,14 @@ impl YModemTrait for YModem {
             info!("Sending block {}", block_num);
             dev.write_all(&buf[0..packet_size+5])?;
 
-            match get_byte_timeout(dev)? {
-                Some(ACK)   => {
+            match get_byte_timeout(dev)?.map(Consts::from) {
+                Some(Consts::ACK)   => {
                     #[cfg(defmt)]
                     debug!("Recived ACK for block {}", block_num);
                     continue;
                 },
                 #[cfg(defmt)]
-                Some(CAN)   =>  warn!("TODO: handle CAN cancel"),
+                Some(Consts::CAN)   =>  warn!("TODO: handle CAN cancel"),
                 #[cfg(defmt)]
                 Some(c)     => warn!("Expected ACK, got {}", c),
                 #[cfg(defmt)]
@@ -475,9 +468,9 @@ impl YModemTrait for YModem {
 
     fn finish_send<D: Read + Write>(&mut self, dev: &mut D) -> ModemResult<()> {
         loop {
-            dev.write_all(&[EOT])?;
-            match get_byte_timeout(dev)? {
-                Some(NAK)   => break,
+            dev.write_all(&[Consts::EOT.into()])?;
+            match get_byte_timeout(dev)?.map(Consts::from) {
+                Some(Consts::NAK)   => break,
                 #[cfg(defmt)]
                 Some(c)     =>  warn!("Expected NAK, got {}", c),
                 #[cfg(defmt)]
@@ -489,9 +482,9 @@ impl YModemTrait for YModem {
         }
 
         loop {
-            dev.write_all(&[EOT])?;
-            match get_byte_timeout(dev)? {
-                Some(ACK)   => break,
+            dev.write_all(&[Consts::EOT.into()])?;
+            match get_byte_timeout(dev)?.map(Consts::from) {
+                Some(Consts::ACK)   => break,
                 #[cfg(defmt)]
                 Some(c)     =>  warn!("Expected ACK, got {}", c),
                 #[cfg(defmt)]
@@ -504,8 +497,8 @@ impl YModemTrait for YModem {
         }
 
         loop {
-            match get_byte_timeout(dev)? {
-                Some(CRC)   => {
+            match get_byte_timeout(dev)?.map(Consts::from) {
+                Some(Consts::CRC)   => {
                     #[cfg(defmt)]
                     info!("YMODEM transmission successful");
                     break;
@@ -525,7 +518,7 @@ impl YModemTrait for YModem {
 
     fn send_end_frame<D: Read + Write>(&mut self, dev: &mut D) -> ModemResult<()> {
         let mut buf = [0; 128 + 5];
-        buf[0] = SOH;
+        buf[0] = Consts::SOH.into();
         buf[1] = 0x00;
         buf[2] = 0xFF;
 
@@ -535,14 +528,14 @@ impl YModemTrait for YModem {
 
         dev.write_all(&buf)?;
         loop {
-            match get_byte_timeout(dev)? {
-                Some(ACK)   => {
+            match get_byte_timeout(dev)?.map(Consts::from) {
+                Some(Consts::ACK)   => {
                     #[cfg(defmt)]
                     debug!("Recived ACK for end frame");
                     break;
                 },
                 #[cfg(defmt)]
-                Some(CAN)   => warn!("TODO: handle CAN cancel"),
+                Some(Consts::CAN)   => warn!("TODO: handle CAN cancel"),
                 #[cfg(defmt)]
                 Some(c)     => warn!("Expected ACK, got {}", c),
                 #[cfg(defmt)]
