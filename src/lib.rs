@@ -15,5 +15,5 @@
     variant_size_differences
 )]
 
-mod common;
+pub mod common;
 pub mod variants;
