@@ -1,6 +1,5 @@
 use core::str::from_utf8;
 use core2::io::*;
-use core::alloc;
 
 use crate::common::*;
 #[cfg(defmt)]
@@ -303,22 +302,20 @@ impl YModemTrait for YModem {
         let mut cancels = 0u32;
         loop {
             match get_byte_timeout(dev)? {
-                Some(c) => match c {
-                    CRC => {
-                        #[cfg(defmt)]
-                        debug!("16-bit CRC requested");
-                        return Ok(());
-                    },
-                    CAN => {
-                        #[cfg(defmt)]
-                        warn!("Cancel (CAN) byte recived");
-                        cancels += 1;
-                    }
-                    c   => {
-                        #[cfg(defmt)]
-                        warn!("Unknown byte recived at start of YMODEM tranfer: {}", c)
-                    },
+                Some(CRC) => {
+                    #[cfg(defmt)]
+                    debug!("16-bit CRC requested");
+                    return Ok(());
                 },
+                Some(CAN) => {
+                    #[cfg(defmt)]
+                    warn!("Cancel (CAN) byte recived");
+                    cancels += 1;
+                },
+                #[cfg(defmt)]
+                Some(c) => warn!("Unknown byte recived at start of YMODEM tranfer: {}", c),
+                #[cfg(not(defmt))]
+                Some(_) => (),
                 None    => {
                     #[cfg(defmt)]
                     warn!("Timed out waiting for start of YMODEM transfer")
@@ -363,8 +360,10 @@ impl YModemTrait for YModem {
         // zero terminate the string
         i += 1;
 
-        for byte in alloc::format!("{:x}", file_size).as_bytes() {
-            buf[i] = *byte;
+        let mut temp = [0x20u8; 24];
+        write!(temp.as_mut_slice(), "{:x}", file_size).unwrap();
+        for byte in temp {
+            buf[i] = byte;
             i += 1;
         }
 
@@ -376,19 +375,37 @@ impl YModemTrait for YModem {
 
         loop {
             match get_byte_timeout(dev)? {
-                Some(ACK)   => {#[cfg(defmt)] debug!("Recived ACK for start frame"); break;},
-                Some(CAN)   => {#[cfg(defmt)] warn!("TODO: handle cancel")},
-                Some(c)     => {#[cfg(defmt)] warn!("Expected ACK, got {}", c)},
-                None        => {#[cfg(defmt)] warn!("Timeout waiting for ACK for start frame")},
+                Some(ACK)   => {
+                    #[cfg(defmt)]
+                    debug!("Recived ACK for start frame");
+                    break;
+                },
+                #[cfg(defmt)]
+                Some(CAN)   => warn!("TODO: handle cancel"),
+                #[cfg(defmt)]
+                Some(c)     => warn!("Expected ACK, got {}", c),
+                #[cfg(defmt)]
+                None        => warn!("Timeout waiting for ACK for start frame"),
+                #[cfg(not(defmt))]
+                _ => (),
             }
             self.add_error()?;
         }
         loop {
             match get_byte_timeout(dev)? {
-                Some(CRC)   => {#[cfg(defmt)] debug!("Recieved C for start frame"); break;},
-                Some(CAN)   => {#[cfg(defmt)] warn!("TODO: handle cancel")},
-                Some(c)     => {#[cfg(defmt)] warn!("Expected C, got {}", c)},
-                None        => {#[cfg(defmt)] warn!("Timeout waiting for CRC start frame")},
+                Some(CRC)   => {
+                    #[cfg(defmt)]
+                    debug!("Recieved C for start frame");
+                    break;
+                },
+                #[cfg(defmt)]
+                Some(CAN)   => warn!("TODO: handle cancel"),
+                #[cfg(defmt)]
+                Some(c)     => warn!("Expected C, got {}", c),
+                #[cfg(defmt)]
+                None        => warn!("Timeout waiting for CRC start frame"),
+                #[cfg(not(defmt))]
+                _ => (),
             }
             self.add_error()?;
         }
@@ -441,9 +458,14 @@ impl YModemTrait for YModem {
                     debug!("Recived ACK for block {}", block_num);
                     continue;
                 },
-                Some(CAN)   => {#[cfg(defmt)] warn!("TODO: handle CAN cancel")},
-                Some(c)     => {#[cfg(defmt)] warn!("Expected ACK, got {}", c)},
-                None        => {#[cfg(defmt)] warn!("Timeout waiting for ACK for block {}", block_num)},
+                #[cfg(defmt)]
+                Some(CAN)   =>  warn!("TODO: handle CAN cancel"),
+                #[cfg(defmt)]
+                Some(c)     => warn!("Expected ACK, got {}", c),
+                #[cfg(defmt)]
+                None        => warn!("Timeout waiting for ACK for block {}", block_num),
+                #[cfg(not(defmt))]
+                _ => (),
             }
             self.add_error()?;
 
@@ -456,8 +478,12 @@ impl YModemTrait for YModem {
             dev.write_all(&[EOT])?;
             match get_byte_timeout(dev)? {
                 Some(NAK)   => break,
-                Some(c)     => {#[cfg(defmt)] warn!("Expected NAK, got {}", c)},
-                None        => {#[cfg(defmt)] warn!("Timeout waiting for NAK for EOT")},
+                #[cfg(defmt)]
+                Some(c)     =>  warn!("Expected NAK, got {}", c),
+                #[cfg(defmt)]
+                None        =>  warn!("Timeout waiting for NAK for EOT"),
+                #[cfg(not(defmt))]
+                _ => (),
             }
             self.add_error()?;
         }
@@ -466,8 +492,12 @@ impl YModemTrait for YModem {
             dev.write_all(&[EOT])?;
             match get_byte_timeout(dev)? {
                 Some(ACK)   => break,
-                Some(c)     => {#[cfg(defmt)] warn!("Expected ACK, got {}", c)},
-                None        => {#[cfg(defmt)] warn!("Timeout waiting for ACK for EOT")},
+                #[cfg(defmt)]
+                Some(c)     =>  warn!("Expected ACK, got {}", c),
+                #[cfg(defmt)]
+                None        =>  warn!("Timeout waiting for ACK for EOT"),
+                #[cfg(not(defmt))]
+                _ => (),
             }
 
             self.add_error()?;
@@ -475,9 +505,17 @@ impl YModemTrait for YModem {
 
         loop {
             match get_byte_timeout(dev)? {
-                Some(CRC)   => {#[cfg(defmt)]info!("YMODEM transmission successful"); break;},
-                Some(c)     => {#[cfg(defmt)] warn!("Expected C, got {}", c)},
-                None        => {#[cfg(defmt)] warn!("Timeout waiting for CRC for EOT")},
+                Some(CRC)   => {
+                    #[cfg(defmt)]
+                    info!("YMODEM transmission successful");
+                    break;
+                 },
+                #[cfg(defmt)]
+                Some(c)     => warn!("Expected C, got {}", c),
+                #[cfg(defmt)]
+                None        => warn!("Timeout waiting for CRC for EOT"),
+                #[cfg(not(defmt))]
+                _ => (),
             }
             self.add_error()?;
         }
@@ -498,10 +536,19 @@ impl YModemTrait for YModem {
         dev.write_all(&buf)?;
         loop {
             match get_byte_timeout(dev)? {
-                Some(ACK)   => {#[cfg(defmt)] debug!("Recived ACK for end frame"); break;},
-                Some(CAN)   => {#[cfg(defmt)] warn!("TODO: handle CAN cancel")},
-                Some(c)     => {#[cfg(defmt)] warn!("Expected ACK, got {}", c)},
-                None        => {#[cfg(defmt)] warn!("Timeout waiting for ACK for end frame")},
+                Some(ACK)   => {
+                    #[cfg(defmt)]
+                    debug!("Recived ACK for end frame");
+                    break;
+                },
+                #[cfg(defmt)]
+                Some(CAN)   => warn!("TODO: handle CAN cancel"),
+                #[cfg(defmt)]
+                Some(c)     => warn!("Expected ACK, got {}", c),
+                #[cfg(defmt)]
+                None        => warn!("Timeout waiting for ACK for end frame"),
+                #[cfg(not(defmt))]
+                _ => (),
             }
             self.add_error()?;
         }
