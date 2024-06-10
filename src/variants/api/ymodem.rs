@@ -1,12 +1,12 @@
 use core::str::from_utf8;
-#[cfg(core2)]
+#[cfg(not(feature = "embedded-io-async"))]
 use core2::io::*;
-#[cfg(embedded_io_async)]
+#[cfg(feature = "embedded-io-async")]
 use embedded_io_async::*;
 
 use crate::variants::ymodem::Consts;
 use crate::common::*;
-#[cfg(defmt)]
+#[cfg(feature = "defmt")]
 use defmt::*;
 use heapless::{String, Vec};
 
@@ -38,7 +38,7 @@ impl YModem {
         self.errors += 1;
 
         if self.errors >= self.max_errors {
-            #[cfg(defmt)]
+            #[cfg(feature = "defmt")]
             error!("Exhausted max retries ({}) while sending start frame in YMODEM transfer", self.max_errors);
             return Err(ModemError::ExhaustedRetries { errors: self.max_errors });
         } else {
@@ -63,7 +63,6 @@ impl ModemTrait for YModem {
     }
 }
 
-#[cfg(any(core2, embedded_io_async))]
 impl YModemTrait for YModem {
     /// Receive a YMODEM transmission.
     ///
@@ -87,7 +86,7 @@ impl YModemTrait for YModem {
         let mut file_buf: Vec<u8, 1024> = Vec::new();
 
         self.errors = 0;
-        #[cfg(defmt)]
+        #[cfg(feature = "defmt")]
         debug!("Starting YMODEM receive");
 
         loop {
@@ -103,7 +102,7 @@ impl YModemTrait for YModem {
                 Err(_err) => {
                     self.initial_errors += 1;
                     if self.initial_errors > self.max_initial_errors {
-                        #[cfg(defmt)]
+                        #[cfg(feature = "defmt")]
                         error!("Exhausted max retries ({}) while waiting for SOH or STX", self.max_initial_errors);
                         return Err(ModemError::ExhaustedRetries { errors: self.errors }); // TODO: Remove Box
                     }
@@ -118,8 +117,8 @@ impl YModemTrait for YModem {
         let mut padding_buf:    Vec<u8, 32> = Vec::new();
 
         loop {
-            let pnum    = (get_byte(dev))?; // specified packet number
-            let pnum_1c = (get_byte(dev))?; // specified packet number 1's complemented
+            let pnum    = get_byte(dev)?; // specified packet number
+            let pnum_1c = get_byte(dev)?; // specified packet number 1's complemented
 
             let cancel_packet = packet_num != pnum || (255 - pnum) != pnum_1c;
 
@@ -187,7 +186,7 @@ impl YModemTrait for YModem {
         let mut received_first_eot = false;
 
         for range in 0..=final_packet {
-            #[cfg(defmt)]
+            #[cfg(feature = "defmt")]
             debug!("{}", range);
             match get_byte_timeout(dev)?.map(Consts::from) {
                 bt @ Some(Consts::SOH) | bt @ Some(Consts::STX) => {
@@ -239,12 +238,12 @@ impl YModemTrait for YModem {
                     }
                 }
                 Some(_) => {
-                    #[cfg(defmt)]
+                    #[cfg(feature = "defmt")]
                     warn!("Unrecognized symbol!")
                 },
                 None    => {
                     self.add_error()?;
-                    #[cfg(defmt)]
+                    #[cfg(feature = "defmt")]
                     error!("Timeout!")
                 },
             }
@@ -276,19 +275,19 @@ impl YModemTrait for YModem {
         let packets_to_send = (file_size + 1023 / 1024) as u32;
         let last_packet_size = file_size % 1024;
 
-        #[cfg(defmt)]
+        #[cfg(feature = "defmt")]
         debug!("Starting YMODEM transfer");
         self.start_send(dev)?;
 
-        #[cfg(defmt)]
+        #[cfg(feature = "defmt")]
         debug!("First byte recieved. Sendiong start frame.");
         self.send_start_frame(dev, file_name, file_size)?;
 
-        #[cfg(defmt)]
+        #[cfg(feature = "defmt")]
         debug!("Start frame acknowleded. Sending stream");
         self.send_stream(dev, inp, packets_to_send, last_packet_size)?;
 
-        #[cfg(defmt)]
+        #[cfg(feature = "defmt")]
         debug!("Sending EOT");
         self.finish_send(dev)?;
 
@@ -300,36 +299,36 @@ impl YModemTrait for YModem {
         loop {
             match get_byte_timeout(dev)?.map(Consts::from) {
                 Some(Consts::CRC) => {
-                    #[cfg(defmt)]
+                    #[cfg(feature = "defmt")]
                     debug!("16-bit CRC requested");
                     return Ok(());
                 },
                 Some(Consts::CAN) => {
-                    #[cfg(defmt)]
+                    #[cfg(feature = "defmt")]
                     warn!("Cancel (CAN) byte recived");
                     cancels += 1;
                 },
-                #[cfg(defmt)]
+                #[cfg(feature = "defmt")]
                 Some(c) => warn!("Unknown byte recived at start of YMODEM tranfer: {}", c),
                 #[cfg(not(defmt))]
                 Some(_) => (),
                 None    => {
-                    #[cfg(defmt)]
+                    #[cfg(feature = "defmt")]
                     warn!("Timed out waiting for start of YMODEM transfer")
                 },
             }
             self.errors += 1;
 
             if cancels >= 2 {
-                #[cfg(defmt)]
+                #[cfg(feature = "defmt")]
                 error!("Transmission canceled: recived two cancel (CAN) bytes at start of YMODEM transfer");
                 return Err(ModemError::Canceled);
             }
             if self.errors >= self.max_errors {
-                #[cfg(defmt)]
+                #[cfg(feature = "defmt")]
                 error!("Exhausted max retries ({}) at start of YMODEM transfer.", self.max_errors);
                 if let Err(err) = dev.write_all(&[Consts::CAN.into()]) {
-                    #[cfg(defmt)]
+                    #[cfg(feature = "defmt")]
                     warn!("Error sending CAN byte: {}", err);
                 }
                 return Err(ModemError::ExhaustedRetries { errors: self.errors });
@@ -373,15 +372,15 @@ impl YModemTrait for YModem {
         loop {
             match get_byte_timeout(dev)?.map(Consts::from) {
                 Some(Consts::ACK)   => {
-                    #[cfg(defmt)]
+                    #[cfg(feature = "defmt")]
                     debug!("Recived ACK for start frame");
                     break;
                 },
-                #[cfg(defmt)]
+                #[cfg(feature = "defmt")]
                 Some(Consts::CAN)   => warn!("TODO: handle cancel"),
-                #[cfg(defmt)]
+                #[cfg(feature = "defmt")]
                 Some(c)     => warn!("Expected ACK, got {}", c),
-                #[cfg(defmt)]
+                #[cfg(feature = "defmt")]
                 None        => warn!("Timeout waiting for ACK for start frame"),
                 #[cfg(not(defmt))]
                 _ => (),
@@ -391,15 +390,15 @@ impl YModemTrait for YModem {
         loop {
             match get_byte_timeout(dev)?.map(Consts::from) {
                 Some(Consts::CRC)   => {
-                    #[cfg(defmt)]
+                    #[cfg(feature = "defmt")]
                     debug!("Recieved C for start frame");
                     break;
                 },
-                #[cfg(defmt)]
+                #[cfg(feature = "defmt")]
                 Some(Consts::CAN)   => warn!("TODO: handle cancel"),
-                #[cfg(defmt)]
+                #[cfg(feature = "defmt")]
                 Some(c)     => warn!("Expected C, got {}", c),
-                #[cfg(defmt)]
+                #[cfg(feature = "defmt")]
                 None        => warn!("Timeout waiting for CRC start frame"),
                 #[cfg(not(defmt))]
                 _ => (),
@@ -427,7 +426,7 @@ impl YModemTrait for YModem {
             let mut buf = [self.pad_byte; 1024 + 5];
             let n = stream.read(&mut buf[3..])?;
             if n == 0 {
-                #[cfg(defmt)]
+                #[cfg(feature = "defmt")]
                 debug!("Reached EOF");
                 return Ok(());
             }
@@ -445,21 +444,21 @@ impl YModemTrait for YModem {
             buf[packet_size+3] = ((crc >> 8) & 0xFF) as u8;
             buf[packet_size+4] = (crc & 0xFF) as u8;
 
-            #[cfg(defmt)]
+            #[cfg(feature = "defmt")]
             info!("Sending block {}", block_num);
             dev.write_all(&buf[0..packet_size+5])?;
 
             match get_byte_timeout(dev)?.map(Consts::from) {
                 Some(Consts::ACK)   => {
-                    #[cfg(defmt)]
+                    #[cfg(feature = "defmt")]
                     debug!("Recived ACK for block {}", block_num);
                     continue;
                 },
-                #[cfg(defmt)]
+                #[cfg(feature = "defmt")]
                 Some(Consts::CAN)   =>  warn!("TODO: handle CAN cancel"),
-                #[cfg(defmt)]
+                #[cfg(feature = "defmt")]
                 Some(c)     => warn!("Expected ACK, got {}", c),
-                #[cfg(defmt)]
+                #[cfg(feature = "defmt")]
                 None        => warn!("Timeout waiting for ACK for block {}", block_num),
                 #[cfg(not(defmt))]
                 _ => (),
@@ -475,9 +474,9 @@ impl YModemTrait for YModem {
             dev.write_all(&[Consts::EOT.into()])?;
             match get_byte_timeout(dev)?.map(Consts::from) {
                 Some(Consts::NAK)   => break,
-                #[cfg(defmt)]
+                #[cfg(feature = "defmt")]
                 Some(c)     =>  warn!("Expected NAK, got {}", c),
-                #[cfg(defmt)]
+                #[cfg(feature = "defmt")]
                 None        =>  warn!("Timeout waiting for NAK for EOT"),
                 #[cfg(not(defmt))]
                 _ => (),
@@ -489,9 +488,9 @@ impl YModemTrait for YModem {
             dev.write_all(&[Consts::EOT.into()])?;
             match get_byte_timeout(dev)?.map(Consts::from) {
                 Some(Consts::ACK)   => break,
-                #[cfg(defmt)]
+                #[cfg(feature = "defmt")]
                 Some(c)     =>  warn!("Expected ACK, got {}", c),
-                #[cfg(defmt)]
+                #[cfg(feature = "defmt")]
                 None        =>  warn!("Timeout waiting for ACK for EOT"),
                 #[cfg(not(defmt))]
                 _ => (),
@@ -503,13 +502,13 @@ impl YModemTrait for YModem {
         loop {
             match get_byte_timeout(dev)?.map(Consts::from) {
                 Some(Consts::CRC)   => {
-                    #[cfg(defmt)]
+                    #[cfg(feature = "defmt")]
                     info!("YMODEM transmission successful");
                     break;
                  },
-                #[cfg(defmt)]
+                #[cfg(feature = "defmt")]
                 Some(c)     => warn!("Expected C, got {}", c),
-                #[cfg(defmt)]
+                #[cfg(feature = "defmt")]
                 None        => warn!("Timeout waiting for CRC for EOT"),
                 #[cfg(not(defmt))]
                 _ => (),
@@ -534,15 +533,15 @@ impl YModemTrait for YModem {
         loop {
             match get_byte_timeout(dev)?.map(Consts::from) {
                 Some(Consts::ACK)   => {
-                    #[cfg(defmt)]
+                    #[cfg(feature = "defmt")]
                     debug!("Recived ACK for end frame");
                     break;
                 },
-                #[cfg(defmt)]
+                #[cfg(feature = "defmt")]
                 Some(Consts::CAN)   => warn!("TODO: handle CAN cancel"),
-                #[cfg(defmt)]
+                #[cfg(feature = "defmt")]
                 Some(c)     => warn!("Expected ACK, got {}", c),
-                #[cfg(defmt)]
+                #[cfg(feature = "defmt")]
                 None        => warn!("Timeout waiting for ACK for end frame"),
                 #[cfg(not(defmt))]
                 _ => (),

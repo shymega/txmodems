@@ -8,7 +8,7 @@ use crate::common::{
     calc_checksum, calc_crc, get_byte, get_byte_timeout, ModemError,
     ModemResult, ModemTrait, XModemTrait,
 };
-#[cfg(core2)]
+#[cfg(not(embedded_io_async))]
 use core2::io::{Read, Write};
 #[cfg(embedded_io_async)]
 use embedded_io_async::{Read, Write};
@@ -42,7 +42,6 @@ pub struct XModem {
     errors: u32,
 }
 
-#[cfg(any(core2, embedded_io_async))]
 impl ModemTrait for XModem {
     fn new() -> Self
     where
@@ -58,7 +57,6 @@ impl ModemTrait for XModem {
     }
 }
 
-#[cfg(any(core2, embedded_io_async))]
 impl XModemTrait for XModem {
     fn send<D, R>(&mut self, dev: &mut D, inp: &mut R) -> ModemResult<()>
     where

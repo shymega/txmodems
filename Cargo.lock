@@ -225,6 +225,7 @@ dependencies = [
  "core2",
  "crc16",
  "defmt",
+ "embedded-io",
  "embedded-io-async",
  "heapless",
  "thiserror-no-std",
