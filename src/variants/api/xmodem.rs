@@ -1,11 +1,17 @@
 use alloc::{boxed::Box, vec, vec::Vec};
 use core::convert::From;
 
+extern crate alloc;
+
+#[cfg(any(core2, embedded_io_async))]
 use crate::common::{
     calc_checksum, calc_crc, get_byte, get_byte_timeout, ModemError,
     ModemResult, ModemTrait, XModemTrait,
 };
+#[cfg(not(embedded_io_async))]
 use core2::io::{Read, Write};
+#[cfg(embedded_io_async)]
+use embedded_io_async::{Read, Write};
 
 use crate::variants::xmodem::{
     common::{BlockLengthKind, ChecksumKind},
