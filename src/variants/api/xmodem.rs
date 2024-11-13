@@ -1,7 +1,7 @@
 use alloc::{boxed::Box, vec, vec::Vec};
 use core::convert::From;
 
-extern crate alloc;
+// extern crate alloc;
 
 #[cfg(any(core2, embedded_io_async))]
 use crate::common::{

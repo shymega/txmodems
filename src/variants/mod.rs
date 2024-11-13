@@ -106,4 +106,10 @@ pub mod ymodem {
             }
         }
     }
+
+    impl defmt::Format for Consts {
+        fn format(&self, fmt: defmt::Formatter) {
+            defmt::write!(fmt, "{}", self)
+        }
+    }
 }

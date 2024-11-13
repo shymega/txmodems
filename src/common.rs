@@ -2,8 +2,6 @@
 
 #![allow(dead_code)]
 
-
-use anyhow::Result;
 #[cfg(not(feature = "async"))]
 use core2::io::{Error, Read, Write};
 use embedded_io_async::{ErrorKind, ReadExactError};
@@ -44,7 +42,7 @@ pub enum ModemError {
     /// IO Error End of File reached before buffered filled
     #[cfg(feature = "async")]
     #[error("Error during I/O on the channel.")]
-    EoF(#[from] ReadExactError<ErrorKind>),
+    EoF,
 
     /// IO Error
     #[cfg(feature = "async")]
@@ -64,7 +62,14 @@ pub enum ModemError {
     Canceled,
 }
 
-
+impl<E: Error> From<ReadExactError<E>> for ModemError {
+    fn from(value: ReadExactError<E>) -> Self {
+        match value {
+            ReadExactError::UnexpectedEof => ModemError::EoF,
+            ReadExactError::Other(e) => ModemError::Io(e.kind()),
+        }
+    }
+}
 
 /// Modem Result type
 pub type ModemResult<T, E = ModemError> = Result<T, E>;
@@ -108,7 +113,7 @@ mod utils {
 #[cfg(feature = "async")]
 mod utils {
     use super::Read;
-    use embedded_io_async::{ErrorKind, ReadExactError};
+    use embedded_io_async::{Error, ErrorKind, ErrorType, ReadExactError};
 
     /// Calculate checksum
     pub fn calc_checksum(data: &[u8]) -> u8 {
@@ -121,18 +126,26 @@ mod utils {
     }
 
     /// get byte
-    pub async fn get_byte<R: Read<Error = ErrorKind>>(reader: &mut R) -> Result<u8, ReadExactError<ErrorKind>> {
+    pub async fn get_byte<R: Read>(reader: &mut R) -> Result<u8, ReadExactError<ErrorKind>> {
         let mut buff = [0];
-        reader.read_exact(&mut buff).await?;
-        Ok(buff[0])
+        match reader.read_exact(&mut buff).await {
+            Ok(_) => Ok(buff[0]),
+            Err(err) => match err {
+                ReadExactError::UnexpectedEof => Err(ReadExactError::UnexpectedEof),
+                ReadExactError::Other(e) => Err(ReadExactError::Other(e.kind())),
+            },
+        }
     }
 
     /// Turns timeout errors into `Ok(None)`
-    pub async fn get_byte_timeout<R: Read<Error = ErrorKind>>(reader: &mut R) -> Result<Option<u8>, ReadExactError<ErrorKind>> {
+    pub async fn get_byte_timeout<R: Read>(reader: &mut R) -> Result<Option<u8>, ReadExactError<ErrorKind>> {
         match get_byte(reader).await {
             Ok(c) => Ok(Some(c)),
-            Err(ReadExactError::Other(ErrorKind::TimedOut)) => Ok(None),
-            Err(err) => Err(err),
+            Err(ReadExactError::UnexpectedEof) => Err(ReadExactError::UnexpectedEof),
+            Err(ReadExactError::Other(err)) => match err.kind() {
+                ErrorKind::TimedOut => Ok(None),
+                _ => Err(ReadExactError::Other(err)),
+            },
         }
     }
 }
@@ -296,13 +309,13 @@ pub trait YModemTrait: ModemTrait {
     /// to set the timeout of the device before calling this method. Timeouts on receiving
     /// bytes will be counted against `max_errors`, but timeouts on transmitting bytes
     /// will be considered a fatal error.
-    async fn recv<D: Read<Error = ErrorKind> + Write, W: Write>(
+    fn recv<D: Read + Write, W: Write>(
         &mut self,
         dev: &mut D,
         out: &mut W,
-        file_name: &mut String<32>,
+        file_name: &mut String<128>,
         file_size: &mut u32,
-    ) -> ModemResult<()>;
+    ) -> impl core::future::Future<Output = ModemResult<()>>;
 
     /// Starts the YMODEM transmission.
     ///
@@ -314,51 +327,51 @@ pub trait YModemTrait: ModemTrait {
     /// to set the timeout of the device before calling this method. Timeouts on receiving
     /// bytes will be counted against `max_errors`, but timeouts on transmitting bytes
     /// will be considered a fatal error.
-    async fn send<D: Read<Error = ErrorKind> + Write, R: Read<Error = ErrorKind>>(
+    fn send<D: Read + Write, R: Read>(
         &mut self,
         dev: &mut D,
         inp: &mut R,
-        file_name: String<32>,
+        file_name: String<128>,
         file_size: u64,
-    ) -> ModemResult<()>;
+    ) -> impl core::future::Future<Output = ModemResult<()>>;
 
     /// Internal function for starting a transmission.
     /// FIXME: Document.
-    async fn start_send<D: Read<Error = ErrorKind> + Write>(
+    fn start_send<D: Read + Write>(
         &mut self,
         dev: &mut D
-    ) -> ModemResult<()>;
+    ) -> impl core::future::Future<Output = ModemResult<()>>;
 
     /// Internal function for initializing a transmission.
     /// FIXME: Document.
-    async fn send_start_frame<D: Read<Error = ErrorKind> + Write>(
+    fn send_start_frame<D: Read + Write>(
         &mut self,
         dev: &mut D,
-        file_name: String<32>,
+        file_name: String<128>,
         file_size: u64,
-    ) -> ModemResult<()>;
+    ) -> impl core::future::Future<Output = ModemResult<()>>;
 
     /// Internal function for sending a stream.
     /// FIXME: Document.
-    async fn send_stream<D: Read<Error = ErrorKind> + Write, R: Read<Error = ErrorKind>>(
+    fn send_stream<D: Read + Write, R: Read>(
         &mut self,
         dev: &mut D,
         stream: &mut R,
         packets_to_send: u32,
         last_packet_size: u64,
-    ) -> ModemResult<()>;
+    ) -> impl core::future::Future<Output = ModemResult<()>>;
 
     /// Internal function for finishing a transmission.
     /// FIXME: Document.
-    async fn finish_send<D: Read<Error = ErrorKind> + Write>(
+    fn finish_send<D: Read + Write>(
         &mut self,
         dev: &mut D,
-    ) -> ModemResult<()>;
+    ) -> impl core::future::Future<Output = ModemResult<()>>;
 
     /// Internal function for finishing a transmission.
     /// FIXME: Document.
-    async fn send_end_frame<D: Read<Error = ErrorKind> + Write>(
+    fn send_end_frame<D: Read + Write>(
         &mut self,
         dev: &mut D,
-    ) -> ModemResult<()>;
+    ) -> impl core::future::Future<Output = ModemResult<()>>;
 }
