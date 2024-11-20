@@ -2,7 +2,6 @@
 
 extern crate alloc;
 
-use alloc::boxed::Box;
 use alloc::string::String;
 
 use anyhow::Result;
@@ -34,7 +33,7 @@ pub enum ModemError {
     /// The number of communications errors exceeded `max_errors` in a single
     /// transmission.
     #[error("Too many errors, aborting - max errors: {errors}")]
-    ExhaustedRetries { errors: Box<u32> },
+    ExhaustedRetries { errors: u32 },
 
     /// The transmission was canceled by the other end of the channel.
     #[error("Cancelled by the other party.")]

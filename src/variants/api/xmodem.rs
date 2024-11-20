@@ -1,11 +1,12 @@
-use alloc::{boxed::Box, vec, vec::Vec};
-use core::convert::From;
-
 use crate::common::{
     calc_checksum, calc_crc, get_byte, get_byte_timeout, ModemError,
     ModemResult, ModemTrait, XModemTrait,
 };
+
+use alloc::{vec, vec::Vec};
+use core::convert::From;
 use core2::io::{Read, Write};
+
 
 use crate::variants::xmodem::{
     common::{BlockLengthKind, ChecksumKind},
@@ -144,7 +145,7 @@ impl XModemTrait for XModem {
             if self.errors >= self.max_errors {
                 dev.write_all(&[Consts::CAN.into()])?;
                 return Err(ModemError::ExhaustedRetries {
-                    errors: Box::from(self.errors),
+                    errors: self.errors,
                 });
             }
         }
@@ -183,7 +184,7 @@ impl XModemTrait for XModem {
             if self.errors >= self.max_errors {
                 // FIXME: Removed a unused 'if let' here. To be re-added?
                 return Err(ModemError::ExhaustedRetries {
-                    errors: Box::from(self.errors),
+                    errors: self.errors,
                 });
             }
         }
@@ -208,7 +209,7 @@ impl XModemTrait for XModem {
 
             if self.errors >= self.max_errors {
                 return Err(ModemError::ExhaustedRetries {
-                    errors: Box::from(self.errors),
+                    errors: self.errors,
                 });
             }
         }
@@ -260,7 +261,7 @@ impl XModemTrait for XModem {
 
             if self.errors >= self.max_errors {
                 return Err(ModemError::ExhaustedRetries {
-                    errors: Box::from(self.errors),
+                    errors: self.errors,
                 });
             }
         }
