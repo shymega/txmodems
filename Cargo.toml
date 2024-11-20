@@ -18,9 +18,11 @@ default = []
 xmodem = []
 ymodem = []
 zmodem = []
+no_alloc = ["heapless"]
 
 [dependencies]
 core2 = { version = "0.4.0", default-features = false }
 crc16 = "0.4.0"
 thiserror-no-std = "2.0.2"
 anyhow = { version = "1.0.75", default-features = false }
+heapless = { version = "0.8.0", optional = true }

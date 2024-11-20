@@ -1,8 +1,12 @@
 #![allow(dead_code)]
 
+#[cfg(not(feature = "no_alloc"))]
 extern crate alloc;
 
+#[cfg(not(feature = "no_alloc"))]
 use alloc::string::String;
+#[cfg(feature = "no_alloc")]
+use heapless::String;
 
 use anyhow::Result;
 use core2::io::{Error, Read, Write};
@@ -141,14 +145,16 @@ pub trait YModemTrait: ModemTrait {
         &mut self,
         dev: &mut D,
         out: &mut W,
-        file_name: &mut String,
+        #[cfg(not(feature = "no_alloc"))] file_name: &mut String,
+        #[cfg(feature = "no_alloc")] file_name: &mut String<128>,
         file_size: &mut u32,
     ) -> ModemResult<()>;
     fn send<D: Read + Write, R: Read>(
         &mut self,
         dev: &mut D,
         inp: &mut R,
-        file_name: String,
+        #[cfg(not(feature = "no_alloc"))] file_name: String,
+        #[cfg(feature = "no_alloc")] file_name: String<128>,
         file_size: u64,
     ) -> ModemResult<()>;
     fn send_stream<D: Read + Write, R: Read>(
@@ -161,7 +167,8 @@ pub trait YModemTrait: ModemTrait {
     fn send_start_frame<D: Read + Write>(
         &mut self,
         dev: &mut D,
-        file_name: String,
+        #[cfg(not(feature = "no_alloc"))] file_name: String,
+        #[cfg(feature = "no_alloc")] file_name: String<128>,
         file_size: u64,
     ) -> ModemResult<()>;
     fn send_end_frame<D: Read + Write>(
