@@ -1,11 +1,13 @@
-use alloc::{boxed::Box, vec, vec::Vec};
-use core::convert::From;
-
 use crate::common::{
     calc_checksum, calc_crc, get_byte, get_byte_timeout, ModemError,
     ModemResult, ModemTrait, XModemTrait,
 };
+#[cfg(not(feature = "no_alloc"))]
+use alloc::{vec, vec::Vec};
+use core::convert::From;
 use core2::io::{Read, Write};
+#[cfg(feature = "no_alloc")]
+use heapless::Vec;
 
 use crate::variants::xmodem::{
     common::{BlockLengthKind, ChecksumKind},
@@ -101,8 +103,14 @@ impl XModemTrait for XModem {
                                                   // We'll respond with cancel later if the packet number is wrong
                     let cancel_packet =
                         packet_num != pnum || (255 - pnum) != pnum_1c;
+                    #[cfg(not(feature = "no_alloc"))]
                     let mut data: Vec<u8> = Vec::new();
+                    #[cfg(feature = "no_alloc")]
+                    let mut data: Vec<u8, 1024> = Vec::new();
+                    #[cfg(not(feature = "no_alloc"))]
                     data.resize(packet_size, 0);
+                    #[cfg(feature = "no_alloc")]
+                    data.resize(packet_size, 0).unwrap_or_default();
                     dev.read_exact(&mut data)?;
                     let success = match self.checksum_mode {
                         ChecksumKind::Standard => {
@@ -144,7 +152,7 @@ impl XModemTrait for XModem {
             if self.errors >= self.max_errors {
                 dev.write_all(&[Consts::CAN.into()])?;
                 return Err(ModemError::ExhaustedRetries {
-                    errors: Box::from(self.errors),
+                    errors: self.errors,
                 });
             }
         }
@@ -183,7 +191,7 @@ impl XModemTrait for XModem {
             if self.errors >= self.max_errors {
                 // FIXME: Removed a unused 'if let' here. To be re-added?
                 return Err(ModemError::ExhaustedRetries {
-                    errors: Box::from(self.errors),
+                    errors: self.errors,
                 });
             }
         }
@@ -208,7 +216,7 @@ impl XModemTrait for XModem {
 
             if self.errors >= self.max_errors {
                 return Err(ModemError::ExhaustedRetries {
-                    errors: Box::from(self.errors),
+                    errors: self.errors,
                 });
             }
         }
@@ -221,7 +229,16 @@ impl XModemTrait for XModem {
     {
         let mut block_num = 0u32;
         loop {
+            #[cfg(not(feature = "no_alloc"))]
             let mut buff = vec![self.pad_byte; self.block_length as usize + 3];
+            #[cfg(feature = "no_alloc")]
+            let mut buff: Vec<u8, 1029> = Vec::new();
+            #[cfg(feature = "no_alloc")]
+            buff.resize(self.block_length as usize + 3, self.pad_byte)
+                .unwrap_or_default();
+
+            #[cfg(not(feature = "no_alloc"))]
+            buff.resize(self.block_length as usize + 3, self.pad_byte);
             let n = inp.read(&mut buff[3..])?;
             if n == 0 {
                 return Ok(());
@@ -238,12 +255,21 @@ impl XModemTrait for XModem {
             match self.checksum_mode {
                 ChecksumKind::Standard => {
                     let checksum = calc_checksum(&buff[3..]);
+                    #[cfg(not(feature = "no_alloc"))]
                     buff.push(checksum);
+                    #[cfg(feature = "no_alloc")]
+                    buff.push(checksum).unwrap_or_default();
                 }
                 ChecksumKind::Crc16 => {
                     let crc = calc_crc(&buff[3..]);
+                    #[cfg(not(feature = "no_alloc"))]
                     buff.push(((crc >> 8) & 0xFF) as u8);
+                    #[cfg(not(feature = "no_alloc"))]
                     buff.push((&crc & 0xFF) as u8);
+                    #[cfg(feature = "no_alloc")]
+                    buff.push(((crc >> 8) & 0xFF) as u8).unwrap_or_default();
+                    #[cfg(feature = "no_alloc")]
+                    buff.push((&crc & 0xFF) as u8).unwrap_or_default();
                 }
             }
 
@@ -260,7 +286,7 @@ impl XModemTrait for XModem {
 
             if self.errors >= self.max_errors {
                 return Err(ModemError::ExhaustedRetries {
-                    errors: Box::from(self.errors),
+                    errors: self.errors,
                 });
             }
         }
