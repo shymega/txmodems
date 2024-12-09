@@ -16,7 +16,6 @@
     variant_size_differences
 )]
 
-#[cfg(not(feature = "no_alloc"))]
 extern crate alloc;
 
 mod common;
