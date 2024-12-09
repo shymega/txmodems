@@ -1,9 +1,12 @@
 #![allow(dead_code)]
 
+#[cfg(feature = "alloc")]
 extern crate alloc;
 
-use alloc::boxed::Box;
+#[cfg(feature = "alloc")]
 use alloc::string::String;
+#[cfg(not(feature = "alloc"))]
+use heapless::String;
 
 use anyhow::Result;
 use core2::io::{Error, Read, Write};
@@ -34,7 +37,7 @@ pub enum ModemError {
     /// The number of communications errors exceeded `max_errors` in a single
     /// transmission.
     #[error("Too many errors, aborting - max errors: {errors}")]
-    ExhaustedRetries { errors: Box<u32> },
+    ExhaustedRetries { errors: u32 },
 
     /// The transmission was canceled by the other end of the channel.
     #[error("Cancelled by the other party.")]
@@ -142,14 +145,16 @@ pub trait YModemTrait: ModemTrait {
         &mut self,
         dev: &mut D,
         out: &mut W,
-        file_name: &mut String,
+        #[cfg(feature = "alloc")] file_name: &mut String,
+        #[cfg(not(feature = "alloc"))] file_name: &mut String<128>,
         file_size: &mut u32,
     ) -> ModemResult<()>;
     fn send<D: Read + Write, R: Read>(
         &mut self,
         dev: &mut D,
         inp: &mut R,
-        file_name: String,
+        #[cfg(feature = "alloc")] file_name: String,
+        #[cfg(not(feature = "alloc"))] file_name: String<128>,
         file_size: u64,
     ) -> ModemResult<()>;
     fn send_stream<D: Read + Write, R: Read>(
@@ -162,7 +167,8 @@ pub trait YModemTrait: ModemTrait {
     fn send_start_frame<D: Read + Write>(
         &mut self,
         dev: &mut D,
-        file_name: String,
+        #[cfg(feature = "alloc")] file_name: String,
+        #[cfg(not(feature = "alloc"))] file_name: String<128>,
         file_size: u64,
     ) -> ModemResult<()>;
     fn send_end_frame<D: Read + Write>(
